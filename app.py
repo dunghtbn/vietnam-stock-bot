@@ -110,7 +110,7 @@ def get_ai_analysis(api_key, symbol, current_price, rsi, ma20, status_ma20, bb_s
         return "⚠️ Vui lòng nhập API Key để xem phân tích."
     
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-pro')
+    model = genai.GenerativeModel('gemini-1.5-pro')
     
     prompt = f"""Role: Bạn là Chuyên gia Phân tích Kỹ thuật Top 1 tại thị trường chứng khoán Việt Nam (VNI). Phong cách của bạn là: Ngắn gọn, súc tích, dựa trên số liệu, không đoán mò.
 
@@ -222,6 +222,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
