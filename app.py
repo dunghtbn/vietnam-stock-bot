@@ -135,7 +135,8 @@ Yêu cầu output format:
 # --- 5. GIAO DIỆN CHÍNH (MAIN) ---
 def main():
     # Thêm tiêu đề chính giữa trang
-    st.markdown("<h1 style='text-align: center; color: #1E88E5;'>BOT Phân tích chứng khoán Việt Nam - Phiên bản 1.0</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: #1E88E5;'>BOT Phân tích chứng khoán Việt Nam Bằng AI - Phiên bản 1.0</h1>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #1E88E5;'>Lập trình và thiết kế bởi Hoàng Trung Dũng - @2026</h3>", unsafe_allow_html=True)
     st.markdown("---") # Đường kẻ ngang phân cách
     
     with st.sidebar:
@@ -217,3 +218,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
