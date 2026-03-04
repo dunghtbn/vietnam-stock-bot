@@ -225,11 +225,12 @@ def main():
        # --- THÊM ĐOẠN NÀY VÀO CUỐI CÙNG CỦA KHỐI IF ---
             st.markdown("---") # Kẻ thêm một đường ngang mỏng
             st.caption(f"🕒 *Dữ liệu được cập nhật lần cuối vào lúc: **{current_time}** (Múi giờ Việt Nam)*")
-            st.markdown("<h5 style='text-align: center; color: #1E88E5;'>Thiết kế và Lập trình bởi: Hoàng Trung Dũng</h5>", unsafe_allow_html=True)
+            st.markdown("<h5 style='text-align: center; color: #1E88E5;'>Thiết kế và Lập trình bởi: Hoàng Trung Dũng - Emai: dung@hdbn.vip</h5>", unsafe_allow_html=True)
         else:
             st.error(f"Không tìm thấy dữ liệu cho mã {symbol}")
 if __name__ == "__main__":
     main()
+
 
 
 
