@@ -143,7 +143,6 @@ def main():
     current_time = datetime.now(vn_tz).strftime("%H:%M:%S - %d/%m/%Y")
     # Tiêu đề chính của App
     st.markdown(f"<h3 style='text-align: center; color: #1E88E5;'>Bot Phân tích chứng khoán Việt Nam bằng AI - {current_time}</h3>", unsafe_allow_html=True)
-    st.markdown("<h5 style='text-align: center; color: #1E88E5;'>Thiết kế và Lập trình bởi: Hoàng Trung Dũng</h5>", unsafe_allow_html=True)
     st.markdown("---")
     with st.sidebar:
         st.title("🎛️ Control Panel")
@@ -226,9 +225,11 @@ def main():
                     
         else:
             st.error(f"Không tìm thấy dữ liệu cho mã {symbol}")
+            st.markdown("<h5 style='text-align: center; color: #1E88E5;'>Thiết kế và Lập trình bởi: Hoàng Trung Dũng</h5>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
+
 
 
 
