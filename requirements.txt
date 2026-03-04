@@ -3,5 +3,4 @@ pandas
 vnstock
 pandas-ta
 plotly
-
 google-generativeai
