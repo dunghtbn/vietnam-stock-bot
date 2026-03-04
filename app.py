@@ -105,12 +105,9 @@ def plot_chart(df, symbol):
     return fig
 
 # --- 4. HÀM GỌI AI ---
-def get_ai_analysis(symbol, current_price, rsi, ma20, status_ma20, bb_status, avg_vol, vol_today):
-    # Tự động lấy API Key từ hệ thống Secrets của Streamlit
-    try:
-        api_key = st.secrets["GEMINI_API_KEY"]
-    except KeyError:
-        return "⚠️ Lỗi: Hệ thống chưa được cấu hình API Key. Vui lòng kiểm tra lại cài đặt Secrets trên Streamlit."
+def get_ai_analysis(api_key, symbol, current_price, rsi, ma20, status_ma20, bb_status, avg_vol, vol_today):
+    if not api_key:
+        return "⚠️ Vui lòng nhập API Key để xem phân tích."
     
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-2.5-flash')
@@ -141,15 +138,12 @@ Yêu cầu output format:
 
 # --- 5. GIAO DIỆN CHÍNH (MAIN) ---
 def main():
-    # Tiêu đề chính của App
-    st.markdown("<h1 style='text-align: center; color: #1E88E5;'>BOT Phân tích chứng khoán Việt Nam Bằng AI - Phiên bản 1.0</h1>", unsafe_allow_html=True)
-    st.markdown("<h3 style='text-align: center; color: #1E88E5;'>Lập trình và thiết kế bởi: Hoàng Trung Dũng @2026</h3>", unsafe_allow_html=True)
-    st.markdown("---")
-    
     with st.sidebar:
         st.title("🎛️ Control Panel")
-        # Đã loại bỏ hoàn toàn ô nhập API Key ở đây
-        symbol = st.text_input("Mã Cổ Phiếu", value="DBC").upper()
+        # Tự động lấy Key từ Secrets nếu có, nếu không thì để trống
+        default_key = st.secrets["GEMINI_API_KEY"] if "GEMINI_API_KEY" in st.secrets else ""
+        api_key = st.text_input("Gemini API Key", type="password", value=default_key)         
+        symbol = st.text_input("Mã Cổ Phiếu", value="HPG").upper()
         timeframe = st.selectbox("Khung thời gian", ["Ngày", "Tuần"])
         st.info("💡 Mẹo: Chọn 'Tuần' để xem xu hướng dài hạn.")
     
@@ -161,4 +155,70 @@ def main():
             last_row = df.iloc[-1]
             prev_row = df.iloc[-2]
             
-            change = last_row['Close'] - prev_row['Close
+            change = last_row['Close'] - prev_row['Close']
+            pct_change = (change / prev_row['Close']) * 100
+            
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Giá đóng cửa", f"{last_row['Close']:,.0f}", f"{pct_change:.2f}%")
+            m2.metric("Khối lượng", f"{last_row['Volume']:,.0f}")
+            m3.metric("RSI (14)", f"{last_row['RSI']:.1f}")
+            m4.metric("MA20 Trend", "Tăng" if last_row['Close'] > last_row['MA20'] else "Giảm")
+            
+            st.divider()
+
+            col_left, col_right = st.columns([2, 1])
+            
+            with col_left:
+                st.subheader(f"📊 Biểu đồ {symbol} ({timeframe})")
+                fig = plot_chart(df, symbol)
+                st.plotly_chart(fig, use_container_width=True)
+
+            with col_right:
+                st.subheader("📋 Chỉ số Kỹ thuật")
+                
+                tech_data = {
+                    "Chỉ số": ["MA20", "MA50", "BB Upper", "BB Lower"],
+                    "Giá trị": [
+                        f"{last_row['MA20']:,.0f}",
+                        f"{last_row['MA50']:,.0f}",
+                        f"{last_row['BB_Upper']:,.0f}",
+                        f"{last_row['BB_Lower']:,.0f}"
+                    ]
+                }
+                st.table(pd.DataFrame(tech_data))
+                
+                status_ma20 = "nằm trên" if last_row['Close'] > last_row['MA20'] else "nằm dưới"
+                
+                if last_row['Close'] >= last_row['BB_Upper']:
+                    bb_status = "Chạm/Vượt Band trên (Cảnh báo Quá mua)"
+                elif last_row['Close'] <= last_row['BB_Lower']:
+                    bb_status = "Chạm/Thủng Band dưới (Cảnh báo Quá bán)"
+                else:
+                    bb_status = "Dao động bình thường trong dải Band"
+                
+                avg_vol = df['Volume'].tail(10).mean()
+                vol_today = last_row['Volume']
+                
+                st.subheader("🤖 AI Khuyến Nghị")
+                if api_key:
+                    if st.button("Phân tích ngay", use_container_width=True):
+                        analysis = get_ai_analysis(
+                            api_key=api_key, 
+                            symbol=symbol, 
+                            current_price=last_row['Close'], 
+                            rsi=last_row['RSI'], 
+                            ma20=last_row['MA20'], 
+                            status_ma20=status_ma20, 
+                            bb_status=bb_status, 
+                            avg_vol=avg_vol, 
+                            vol_today=vol_today
+                        )
+                        st.markdown(analysis)
+                else:
+                    st.warning("Nhập API Key để xem nhận định.")
+                    
+        else:
+            st.error(f"Không tìm thấy dữ liệu cho mã {symbol}")
+
+if __name__ == "__main__":
+    main()
