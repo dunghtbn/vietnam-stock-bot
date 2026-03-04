@@ -2,9 +2,12 @@ import streamlit as st
 import pandas as pd
 import ta
 import plotly.graph_objects as go
-from vnstock import Vnstock  # <--- Cú pháp import mới của v3
+from vnstock import Vnstock
 from datetime import date, timedelta
 import google.generativeai as genai
+
+# --- ĐIỀN API KEY CỦA BẠN VÀO ĐÂY ---
+MY_GEMINI_API_KEY = "AIzaSyDdeKw1Cjm3bZ0tJPfnooUM58lMMhS7Z40"
 
 # --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(
@@ -27,17 +30,14 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. HÀM XỬ LÝ DỮ LIỆU (Cập nhật theo vnstock v3.4.2) ---
+# --- 2. HÀM XỬ LÝ DỮ LIỆU ---
 @st.cache_data(ttl=300)
 def load_data(symbol, timeframe):
     end_date = date.today().strftime("%Y-%m-%d")
     start_date = (date.today() - timedelta(days=730)).strftime("%Y-%m-%d") 
     
     try:
-        # Trong v3, interval dùng '1D' (Ngày) và '1W' (Tuần)
         resolution = '1W' if timeframe == 'Tuần' else '1D'
-        
-        # Cú pháp khởi tạo đối tượng lấy dữ liệu của thế hệ 3 (sử dụng nguồn TCBS)
         stock = Vnstock().stock(symbol=symbol, source='KBS')
         df = stock.quote.history(start=start_date, end=end_date, interval=resolution)
         
@@ -47,7 +47,6 @@ def load_data(symbol, timeframe):
         df['time'] = pd.to_datetime(df['time'])
         df.set_index('time', inplace=True)
         
-        # vnstock v3 trả về tên cột chữ thường, ta đổi lại cho khớp code
         mapping = {
             'open': 'Open', 'high': 'High', 'low': 'Low', 
             'close': 'Close', 'volume': 'Volume'
@@ -105,12 +104,9 @@ def plot_chart(df, symbol):
     return fig
 
 # --- 4. HÀM GỌI AI ---
-def get_ai_analysis(api_key, symbol, current_price, rsi, ma20, status_ma20, bb_status, avg_vol, vol_today):
-    if not api_key:
-        return "⚠️ Vui lòng nhập API Key để xem phân tích."
-    
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-2.5-flash')
+def get_ai_analysis(symbol, current_price, rsi, ma20, status_ma20, bb_status, avg_vol, vol_today):
+    genai.configure(api_key=MY_GEMINI_API_KEY)
+    model = genai.GenerativeModel('gemini-2.5-flash') # Đã giữ lại bản Pro theo ý bạn
     
     prompt = f"""Role: Bạn là Chuyên gia Phân tích Kỹ thuật Top 1 tại thị trường chứng khoán Việt Nam (VNI). Phong cách của bạn là: Ngắn gọn, súc tích, dựa trên số liệu, không đoán mò.
 
@@ -138,12 +134,14 @@ Yêu cầu output format:
 
 # --- 5. GIAO DIỆN CHÍNH (MAIN) ---
 def main():
+    # Thêm tiêu đề chính giữa trang
+    st.markdown("<h1 style='text-align: center; color: #1E88E5;'>BOT Phân tích chứng khoán Việt Nam - Phiên bản 1.0</h1>", unsafe_allow_html=True)
+    st.markdown("---") # Đường kẻ ngang phân cách
+    
     with st.sidebar:
         st.title("🎛️ Control Panel")
-        # Tự động lấy Key từ Secrets nếu có, nếu không thì để trống
-        default_key = st.secrets["GEMINI_API_KEY"] if "GEMINI_API_KEY" in st.secrets else ""
-        api_key = st.text_input("Gemini API Key", type="password", value=default_key)         
-        symbol = st.text_input("Mã Cổ Phiếu", value="HPG").upper()
+        # Đã gỡ bỏ phần nhập API Key ở đây
+        symbol = st.text_input("Mã Cổ Phiếu", value="DBC").upper()
         timeframe = st.selectbox("Khung thời gian", ["Ngày", "Tuần"])
         st.info("💡 Mẹo: Chọn 'Tuần' để xem xu hướng dài hạn.")
     
@@ -200,35 +198,22 @@ def main():
                 vol_today = last_row['Volume']
                 
                 st.subheader("🤖 AI Khuyến Nghị")
-                if api_key:
-                    if st.button("Phân tích ngay", use_container_width=True):
-                        analysis = get_ai_analysis(
-                            api_key=api_key, 
-                            symbol=symbol, 
-                            current_price=last_row['Close'], 
-                            rsi=last_row['RSI'], 
-                            ma20=last_row['MA20'], 
-                            status_ma20=status_ma20, 
-                            bb_status=bb_status, 
-                            avg_vol=avg_vol, 
-                            vol_today=vol_today
-                        )
-                        st.markdown(analysis)
-                else:
-                    st.warning("Nhập API Key để xem nhận định.")
+                # Xóa điều kiện if api_key vì key đã được fix cứng
+                if st.button("Phân tích ngay", use_container_width=True):
+                    analysis = get_ai_analysis(
+                        symbol=symbol, 
+                        current_price=last_row['Close'], 
+                        rsi=last_row['RSI'], 
+                        ma20=last_row['MA20'], 
+                        status_ma20=status_ma20, 
+                        bb_status=bb_status, 
+                        avg_vol=avg_vol, 
+                        vol_today=vol_today
+                    )
+                    st.markdown(analysis)
                     
         else:
             st.error(f"Không tìm thấy dữ liệu cho mã {symbol}")
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
