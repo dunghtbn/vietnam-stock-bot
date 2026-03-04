@@ -138,12 +138,13 @@ Yêu cầu output format:
 
 # --- 5. GIAO DIỆN CHÍNH (MAIN) ---
 def main():
+    # Tiêu đề chính của App
+    st.markdown("<h1 style='text-align: center; color: #1E88E5;'>BOT Phân tích chứng khoán Việt Nam bằng AI - Phiên bản 1.0</h1>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #1E88E5;'>Thiết kế và Lập trình bởi: Hoàng Trung Dũng @2026</h3>", unsafe_allow_html=True)
+    st.markdown("---")
     with st.sidebar:
-        st.title("🎛️ Control Panel")
-        # Tự động lấy Key từ Secrets nếu có, nếu không thì để trống
-        default_key = st.secrets["GEMINI_API_KEY"] if "GEMINI_API_KEY" in st.secrets else ""
-        api_key = st.text_input("Gemini API Key", type="password", value=default_key)         
-        symbol = st.text_input("Mã Cổ Phiếu", value="HPG").upper()
+        st.title("🎛️ Control Panel")             
+        symbol = st.text_input("Mã Cổ Phiếu", value="DBC").upper()
         timeframe = st.selectbox("Khung thời gian", ["Ngày", "Tuần"])
         st.info("💡 Mẹo: Chọn 'Tuần' để xem xu hướng dài hạn.")
     
@@ -222,3 +223,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
