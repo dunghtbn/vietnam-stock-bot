@@ -146,6 +146,7 @@ def main():
         st.title("🎛️ Control Panel")
         # Tự động lấy Key từ Secrets nếu có, nếu không thì để trống
         default_key = st.secrets["GEMINI_API_KEY"] if "GEMINI_API_KEY" in st.secrets else ""
+        api_key = st.text_input("Gemini API Key")    
         symbol = st.text_input("Mã Cổ Phiếu", value="DBC").upper()
         timeframe = st.selectbox("Khung thời gian", ["Ngày", "Tuần"])
         st.info("💡 Mẹo: Chọn 'Tuần' để xem xu hướng dài hạn.")
@@ -225,5 +226,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
