@@ -143,7 +143,9 @@ def main():
     st.markdown("<h3 style='text-align: center; color: #1E88E5;'>Thiết kế và Lập trình bởi: Hoàng Trung Dũng @2026</h3>", unsafe_allow_html=True)
     st.markdown("---")
     with st.sidebar:
-        st.title("🎛️ Control Panel")             
+        st.title("🎛️ Control Panel")
+        # Tự động lấy Key từ Secrets nếu có, nếu không thì để trống
+        default_key = st.secrets["GEMINI_API_KEY"] if "GEMINI_API_KEY" in st.secrets else ""
         symbol = st.text_input("Mã Cổ Phiếu", value="DBC").upper()
         timeframe = st.selectbox("Khung thời gian", ["Ngày", "Tuần"])
         st.info("💡 Mẹo: Chọn 'Tuần' để xem xu hướng dài hạn.")
@@ -223,4 +225,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
