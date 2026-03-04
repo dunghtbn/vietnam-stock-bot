@@ -6,9 +6,6 @@ from vnstock import Vnstock
 from datetime import date, timedelta
 import google.generativeai as genai
 
-# --- ĐIỀN API KEY CỦA BẠN VÀO ĐÂY ---
-MY_GEMINI_API_KEY = "AIzaSyAdBLa6fYLp7d9oka2H_u2zxlhQjQ052X0"
-
 # --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(
     page_title="Pro Stock Analyst AI",
@@ -218,6 +215,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
