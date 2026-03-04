@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
-import ta  # Đã chuyển sang thư viện 'ta' siêu ổn định
+import ta
 import plotly.graph_objects as go
-from vnstock import stock_historical_data
+from vnstock import Vnstock  # <--- Cú pháp import mới của v3
 from datetime import date, timedelta
 import google.generativeai as genai
 
@@ -27,15 +27,19 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. HÀM XỬ LÝ DỮ LIỆU ---
+# --- 2. HÀM XỬ LÝ DỮ LIỆU (Cập nhật theo vnstock v3.4.2) ---
 @st.cache_data(ttl=300)
 def load_data(symbol, timeframe):
     end_date = date.today().strftime("%Y-%m-%d")
     start_date = (date.today() - timedelta(days=730)).strftime("%Y-%m-%d") 
     
     try:
+        # Trong v3, interval dùng '1D' (Ngày) và '1W' (Tuần)
         resolution = '1W' if timeframe == 'Tuần' else '1D'
-        df = stock_historical_data(symbol, start_date, end_date, resolution, "stock")
+        
+        # Cú pháp khởi tạo đối tượng lấy dữ liệu của thế hệ 3 (sử dụng nguồn VCI)
+        stock = Vnstock().stock(symbol=symbol, source='VCI')
+        df = stock.quote.history(start=start_date, end=end_date, interval=resolution)
         
         if df is None or df.empty:
             return None
@@ -43,6 +47,7 @@ def load_data(symbol, timeframe):
         df['time'] = pd.to_datetime(df['time'])
         df.set_index('time', inplace=True)
         
+        # vnstock v3 trả về tên cột chữ thường, ta đổi lại cho khớp code
         mapping = {
             'open': 'Open', 'high': 'High', 'low': 'Low', 
             'close': 'Close', 'volume': 'Volume'
@@ -52,23 +57,18 @@ def load_data(symbol, timeframe):
         for col in mapping.values():
             df[col] = pd.to_numeric(df[col], errors='coerce')
             
-        # Lọc bỏ các dòng có dữ liệu NaN để thư viện 'ta' không bị lỗi
         df = df.dropna()
         return df
     except Exception as e:
-        st.error(f"Lỗi tải dữ liệu: {e}")
+        st.error(f"Lỗi API dữ liệu: {e}")
         return None
 
 def calculate_indicators(df):
     """Tính toán các chỉ báo kỹ thuật bằng thư viện 'ta'"""
-    # RSI
     df['RSI'] = ta.momentum.RSIIndicator(close=df['Close'], window=14).rsi()
-    
-    # Moving Averages
     df['MA20'] = ta.trend.SMAIndicator(close=df['Close'], window=20).sma_indicator()
     df['MA50'] = ta.trend.SMAIndicator(close=df['Close'], window=50).sma_indicator()
     
-    # Bollinger Bands
     indicator_bb = ta.volatility.BollingerBands(close=df['Close'], window=20, window_dev=2)
     df['BB_Upper'] = indicator_bb.bollinger_hband()
     df['BB_Lower'] = indicator_bb.bollinger_lband()
