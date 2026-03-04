@@ -140,8 +140,9 @@ Yêu cầu output format:
 def main():
     with st.sidebar:
         st.title("🎛️ Control Panel")
-        api_key = st.text_input("Gemini API Key", type="password")
-        symbol = st.text_input("Mã Cổ Phiếu", value="HPG").upper()
+        # Tự động lấy Key từ Secrets nếu có, nếu không thì để trống
+        default_key = st.secrets["GEMINI_API_KEY"] if "GEMINI_API_KEY" in st.secrets else ""
+        api_key = st.text_input("Gemini API Key", type="password", value=default_key)
         timeframe = st.selectbox("Khung thời gian", ["Ngày", "Tuần"])
         st.info("💡 Mẹo: Chọn 'Tuần' để xem xu hướng dài hạn.")
     
@@ -220,6 +221,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
