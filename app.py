@@ -3,7 +3,7 @@ import pandas as pd
 import ta
 import plotly.graph_objects as go
 from vnstock import Vnstock  # <--- Cú pháp import mới của v3
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime, timezone
 import google.generativeai as genai
 
 # --- 1. CẤU HÌNH TRANG ---
@@ -138,9 +138,12 @@ Yêu cầu output format:
 
 # --- 5. GIAO DIỆN CHÍNH (MAIN) ---
 def main():
+    # Lấy giờ hệ thống hiện tại và ép về múi giờ Việt Nam (UTC+7)
+    vn_tz = timezone(timedelta(hours=7))
+    current_time = datetime.now(vn_tz).strftime("%H:%M:%S - %d/%m/%Y")
     # Tiêu đề chính của App
-    st.markdown("<h1 style='text-align: center; color: #1E88E5;'>BOT Phân tích chứng khoán Việt Nam bằng AI - Phiên bản 1.0</h1>", unsafe_allow_html=True)
-    st.markdown("<h3 style='text-align: center; color: #1E88E5;'>Thiết kế và Lập trình bởi: Hoàng Trung Dũng @2026</h3>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #1E88E5;'>Bot Phân tích chứng khoán Việt Nam bằng AI</h2>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #1E88E5;'>Thiết kế và Lập trình bởi: Hoàng Trung Dũng - {current_time}</h3>", unsafe_allow_html=True)
     st.markdown("---")
     with st.sidebar:
         st.title("🎛️ Control Panel")
@@ -226,6 +229,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
