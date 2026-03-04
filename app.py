@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import pandas_ta as ta
+import ta  # Đã chuyển sang thư viện 'ta' siêu ổn định
 import plotly.graph_objects as go
 from vnstock import stock_historical_data
 from datetime import date, timedelta
@@ -14,7 +14,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS tùy chỉnh để giao diện gọn gàng hơn
 st.markdown("""
 <style>
     .stMetric {
@@ -31,7 +30,6 @@ st.markdown("""
 # --- 2. HÀM XỬ LÝ DỮ LIỆU ---
 @st.cache_data(ttl=300)
 def load_data(symbol, timeframe):
-    """Lấy dữ liệu và xử lý khung thời gian"""
     end_date = date.today().strftime("%Y-%m-%d")
     start_date = (date.today() - timedelta(days=730)).strftime("%Y-%m-%d") 
     
@@ -54,28 +52,32 @@ def load_data(symbol, timeframe):
         for col in mapping.values():
             df[col] = pd.to_numeric(df[col], errors='coerce')
             
+        # Lọc bỏ các dòng có dữ liệu NaN để thư viện 'ta' không bị lỗi
+        df = df.dropna()
         return df
     except Exception as e:
         st.error(f"Lỗi tải dữ liệu: {e}")
         return None
 
 def calculate_indicators(df):
-    """Tính toán các chỉ báo kỹ thuật"""
-    df['RSI'] = df.ta.rsi(length=14)
-    df['MA20'] = df.ta.sma(length=20)
-    df['MA50'] = df.ta.sma(length=50)
+    """Tính toán các chỉ báo kỹ thuật bằng thư viện 'ta'"""
+    # RSI
+    df['RSI'] = ta.momentum.RSIIndicator(close=df['Close'], window=14).rsi()
     
-    bb = df.ta.bbands(length=20, std=2)
-    df['BB_Upper'] = bb['BBU_20_2.0']
-    df['BB_Lower'] = bb['BBL_20_2.0']
+    # Moving Averages
+    df['MA20'] = ta.trend.SMAIndicator(close=df['Close'], window=20).sma_indicator()
+    df['MA50'] = ta.trend.SMAIndicator(close=df['Close'], window=50).sma_indicator()
+    
+    # Bollinger Bands
+    indicator_bb = ta.volatility.BollingerBands(close=df['Close'], window=20, window_dev=2)
+    df['BB_Upper'] = indicator_bb.bollinger_hband()
+    df['BB_Lower'] = indicator_bb.bollinger_lband()
     
     return df
 
 # --- 3. HÀM VẼ BIỂU ĐỒ (PLOTLY) ---
 def plot_chart(df, symbol):
-    """Vẽ biểu đồ nến và các đường MA"""
     plot_df = df.tail(150)
-    
     fig = go.Figure()
 
     fig.add_trace(go.Candlestick(
@@ -100,12 +102,10 @@ def plot_chart(df, symbol):
         margin=dict(l=20, r=20, t=40, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
-    
     return fig
 
 # --- 4. HÀM GỌI AI ---
 def get_ai_analysis(api_key, symbol, current_price, rsi, ma20, status_ma20, bb_status, avg_vol, vol_today):
-    """Gửi prompt cho AI và nhận về phân tích"""
     if not api_key:
         return "⚠️ Vui lòng nhập API Key để xem phân tích."
     
@@ -129,7 +129,6 @@ Yêu cầu output format:
 3. Điểm cắt lỗ (Stoploss): [Giá D] (Bắt buộc phải có)
 💡 **LÝ DO:** [Giải thích ngắn gọn 2 dòng dựa trên RSI và Volume]
 """
-    
     try:
         with st.spinner('🤖 AI đang phân tích biểu đồ theo format chuyên gia...'):
             response = model.generate_content(prompt)
@@ -139,7 +138,6 @@ Yêu cầu output format:
 
 # --- 5. GIAO DIỆN CHÍNH (MAIN) ---
 def main():
-    # --- Sidebar ---
     with st.sidebar:
         st.title("🎛️ Control Panel")
         api_key = st.text_input("Gemini API Key", type="password")
@@ -147,7 +145,6 @@ def main():
         timeframe = st.selectbox("Khung thời gian", ["Ngày", "Tuần"])
         st.info("💡 Mẹo: Chọn 'Tuần' để xem xu hướng dài hạn.")
     
-    # --- Main Content ---
     if symbol:
         df = load_data(symbol, timeframe)
         
@@ -156,7 +153,6 @@ def main():
             last_row = df.iloc[-1]
             prev_row = df.iloc[-2]
             
-            # --- Top Metrics Row ---
             change = last_row['Close'] - prev_row['Close']
             pct_change = (change / prev_row['Close']) * 100
             
@@ -168,7 +164,6 @@ def main():
             
             st.divider()
 
-            # --- Layout 2 Cột ---
             col_left, col_right = st.columns([2, 1])
             
             with col_left:
@@ -190,7 +185,6 @@ def main():
                 }
                 st.table(pd.DataFrame(tech_data))
                 
-                # Tính toán các thông số cho AI Prompt
                 status_ma20 = "nằm trên" if last_row['Close'] > last_row['MA20'] else "nằm dưới"
                 
                 if last_row['Close'] >= last_row['BB_Upper']:
@@ -203,7 +197,6 @@ def main():
                 avg_vol = df['Volume'].tail(10).mean()
                 vol_today = last_row['Volume']
                 
-                # Nút gọi AI
                 st.subheader("🤖 AI Khuyến Nghị")
                 if api_key:
                     if st.button("Phân tích ngay", use_container_width=True):
