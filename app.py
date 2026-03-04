@@ -37,8 +37,8 @@ def load_data(symbol, timeframe):
         # Trong v3, interval dùng '1D' (Ngày) và '1W' (Tuần)
         resolution = '1W' if timeframe == 'Tuần' else '1D'
         
-        # Cú pháp khởi tạo đối tượng lấy dữ liệu của thế hệ 3 (sử dụng nguồn VCI)
-        stock = Vnstock().stock(symbol=symbol, source='SSI')
+        # Cú pháp khởi tạo đối tượng lấy dữ liệu của thế hệ 3 (sử dụng nguồn TCBS)
+        stock = Vnstock().stock(symbol=symbol, source='TCBS')
         df = stock.quote.history(start=start_date, end=end_date, interval=resolution)
         
         if df is None or df.empty:
@@ -220,4 +220,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
