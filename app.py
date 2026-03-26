@@ -227,139 +227,223 @@ def main():
     vn_tz = timezone(timedelta(hours=7))
     current_time = datetime.now(vn_tz).strftime("%H:%M:%S - %d/%m/%Y")
     
-    st.markdown(f"<h2 style='text-align: center; color: #1E88E5;'>🚀 Bot Phân Tích Chứng Khoán Hybrid AI 2.0</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2 style='text-align: center; color: #1E88E5;'>🚀 Bot Phân Tích Chứng Khoán Hybrid AI 4.0</h2>", unsafe_allow_html=True)
     st.markdown("---")
+    # --- BƯỚC 1: TẠO 2 TAB GIAO DIỆN ---
+    tab1, tab2 = st.tabs(["📊 Phân Tích Chuyên Sâu", "🎯 Radar Quét Cổ Phiếu"])
     
-    with st.sidebar:
-        st.title("🎛️ Control Panel")
-        try: api_key = st.secrets["GEMINI_API_KEY"]
-        except KeyError: api_key = ""
-            
-        symbol = st.text_input("Mã Cổ Phiếu", value="DBC").upper()
-        timeframe = st.selectbox("Khung thời gian", ["Ngày", "Tuần"])
-        st.info("💡 Mẹo: Chọn 'Tuần' để xem xu hướng dài hạn.")
-        st.success("✨ V2.0: Tích hợp Đa luồng Dữ liệu FA & Báo cáo Tự động")
-    
-    if symbol:
-        df = load_data(symbol, timeframe)
-        df_vnindex = load_vnindex_data(timeframe)
-        fa_data = load_fundamental_data(symbol)
-        
-        if df is not None:
-            df = calculate_indicators(df)
+    # --- ĐƯA TOÀN BỘ GIAO DIỆN CŨ VÀO TAB 1 ---
+    with tab1:
+        if df is not None and not df.empty:
+            # ---> LƯU Ý: TOÀN BỘ CODE CŨ TỪ ĐOẠN NÀY TRỞ XUỐNG ANH BÔI ĐEN VÀ ẤN PHÍM 'TAB' ĐỂ LÙI LỀ VÀO TRONG 'with tab1:' NHÉ!
             last_row = df.iloc[-1]
-            prev_row = df.iloc[-2]
+            # ... (Các cột hiển thị Giá, Biểu đồ, Bảng FA, Nút gọi AI... giữ nguyên) ...
+    
+        with st.sidebar:
+            st.title("🎛️ Control Panel")
+            try: api_key = st.secrets["GEMINI_API_KEY"]
+            except KeyError: api_key = ""
+                
+            symbol = st.text_input("Mã Cổ Phiếu", value="DBC").upper()
+            timeframe = st.selectbox("Khung thời gian", ["Ngày", "Tuần"])
+            st.info("💡 Mẹo: Chọn 'Tuần' để xem xu hướng dài hạn.")
+            st.success("✨ V2.0: Tích hợp Đa luồng Dữ liệu FA & Báo cáo Tự động")
+        
+        if symbol:
+            df = load_data(symbol, timeframe)
+            df_vnindex = load_vnindex_data(timeframe)
+            fa_data = load_fundamental_data(symbol)
             
-            change = last_row['Close'] - prev_row['Close']
-            pct_change = (change / prev_row['Close']) * 100
-            
-            lookback = 20 if len(df) >= 20 else len(df) - 1
-            if lookback > 0:
-                stock_perf = ((last_row['Close'] - df['Close'].iloc[-1 - lookback]) / df['Close'].iloc[-1 - lookback]) * 100
-            else:
-                stock_perf = 0.0
-
-            if df_vnindex is not None and len(df_vnindex) > lookback:
-                vnindex_perf = ((df_vnindex['Close'].iloc[-1] - df_vnindex['Close'].iloc[-1 - lookback]) / df_vnindex['Close'].iloc[-1 - lookback]) * 100
-            else:
-                vnindex_perf = 0.0
+            if df is not None:
+                df = calculate_indicators(df)
+                last_row = df.iloc[-1]
+                prev_row = df.iloc[-2]
                 
-            if stock_perf > vnindex_perf: rs_status = "KHỎE HƠN 💪"
-            elif stock_perf < vnindex_perf: rs_status = "YẾU HƠN ⚠️"
-            else: rs_status = "TƯƠNG ĐƯƠNG ⚖️"
-            
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Giá đóng cửa", f"{last_row['Close']:,.2f}", f"{pct_change:.2f}%")
-            m2.metric("Khối lượng", f"{last_row['Volume']:,.0f}")
-            m3.metric("RSI (14)", f"{last_row['RSI']:.1f}")
-            m4.metric("MA20 Trend", "Tăng" if last_row['Close'] > last_row['MA20'] else "Giảm")
-            
-            st.divider()
-
-            col_left, col_right = st.columns([2, 1])
-            
-            with col_left:
-                st.info(f"📈 **Đo lường RS (20 phiên):** Mã **{symbol}** thay đổi **{stock_perf:.2f}%** | VN-Index thay đổi **{vnindex_perf:.2f}%** ➔ Cổ phiếu đang **{rs_status}**")
+                change = last_row['Close'] - prev_row['Close']
+                pct_change = (change / prev_row['Close']) * 100
                 
-                st.subheader(f"📊 Biểu đồ {symbol} ({timeframe})")
-                fig = plot_chart(df, symbol)
-                st.plotly_chart(fig, use_container_width=True)
-
-            with col_right:
-                st.subheader("📋 Chỉ số Kỹ thuật (TA)")
-                tech_data = {
-                    "Chỉ số": ["MA20", "MA50", "BB Upper", "BB Lower"],
-                    "Giá trị": [f"{last_row['MA20']:,.2f}", f"{last_row['MA50']:,.2f}", f"{last_row['BB_Upper']:,.2f}", f"{last_row['BB_Lower']:,.2f}"]
-                }
-                st.table(pd.DataFrame(tech_data))
-                
-                # TÌM VÀ SỬA ĐOẠN HIỂN THỊ BẢNG FA (Trong hàm main)
-                st.subheader("🏢 Chỉ số Cơ bản & Sức khỏe")
-                fa_df = {
-                    "Chỉ số": ["Vốn hóa thị trường", "Tỷ lệ Nợ / Vốn CSH", "Tỷ suất Cổ tức", "P/E", "P/B", "ROE (%)"],
-                    "Giá trị": [fa_data['market_cap'], fa_data['debt_to_equity'], fa_data['div_yield'], fa_data['pe'], fa_data['pb'], fa_data['roe']]
-                }
-                st.table(pd.DataFrame(fa_df))
-                
-                status_ma20 = "nằm trên" if last_row['Close'] > last_row['MA20'] else "nằm dưới"
-                if last_row['Close'] >= last_row['BB_Upper']: bb_status = "Chạm/Vượt Band trên (Quá mua)"
-                elif last_row['Close'] <= last_row['BB_Lower']: bb_status = "Chạm/Thủng Band dưới (Quá bán)"
-                else: bb_status = "Dao động bình thường"
-                
-                avg_vol = df['Volume'].tail(10).mean()
-                vol_today = last_row['Volume']
-                
-                st.subheader("🤖 AI Khuyến Nghị V3.0 (Kiểm soát Rủi ro)")
-                
-                if 'ai_analysis' not in st.session_state:
-                    st.session_state.ai_analysis = ""
-                if 'analyzed_symbol' not in st.session_state:
-                    st.session_state.analyzed_symbol = ""
-
-                if api_key:
-                    if st.button("Phân tích chuyên sâu", use_container_width=True):
-                        analysis = get_ai_analysis(
-                            api_key=api_key, symbol=symbol, current_price=last_row['Close'], 
-                            rsi=last_row['RSI'], ma20=last_row['MA20'], status_ma20=status_ma20, 
-                            bb_status=bb_status, avg_vol=avg_vol, vol_today=vol_today,
-                            stock_perf=stock_perf, vnindex_perf=vnindex_perf, rs_status=rs_status.split()[0],
-                            pe=fa_data['pe'], pb=fa_data['pb'], roe=fa_data['roe'],
-                            market_cap=fa_data['market_cap'], div_yield=fa_data['div_yield'], debt_to_equity=fa_data['debt_to_equity'] # <-- THÊM 3 BIẾN NÀY
-                        )
-                        st.session_state.ai_analysis = analysis
-                        st.session_state.analyzed_symbol = symbol
-
-                    if st.session_state.ai_analysis and st.session_state.analyzed_symbol == symbol:
-                        st.markdown(st.session_state.ai_analysis)
-                        
-                        st.divider()
-                        
-                        # --- CẬP NHẬT FILE BÁO CÁO TXT ---
-                        report_content = f"BÁO CÁO PHÂN TÍCH MÃ {symbol}\n"
-                        report_content += f"Ngày phân tích: {current_time}\n"
-                        report_content += "-"*40 + "\n"
-                        report_content += f"[Kỹ thuật] Giá: {last_row['Close']:,.2f} | RSI: {last_row['RSI']:.2f} | Khối lượng: {vol_today:,.0f}\n"
-                        report_content += f"[Cơ bản] Vốn hóa: {fa_data['market_cap']} | P/E: {fa_data['pe']} | P/B: {fa_data['pb']} | ROE: {fa_data['roe']}%\n"
-                        report_content += f"[Độ An Toàn] Tỷ suất cổ tức: {fa_data['div_yield']} | Nợ/Vốn CSH: {fa_data['debt_to_equity']}\n"
-                        report_content += f"[Sức mạnh Giá] {symbol} thay đổi {stock_perf:.2f}% vs VN-Index {vnindex_perf:.2f}%\n"
-                        report_content += "-"*40 + "\n\n"
-                        report_content += st.session_state.ai_analysis
-                        
-                        st.download_button(
-                            label="📥 Tải Báo Cáo Nhận Định (TXT)",
-                            data=report_content,
-                            file_name=f"Bao_cao_AI_RiskControl_{symbol}_{date.today()}.txt",
-                            mime="text/plain",
-                            use_container_width=True
-                        )
+                lookback = 20 if len(df) >= 20 else len(df) - 1
+                if lookback > 0:
+                    stock_perf = ((last_row['Close'] - df['Close'].iloc[-1 - lookback]) / df['Close'].iloc[-1 - lookback]) * 100
                 else:
-                    st.warning("Hệ thống chưa thiết lập API Key. Vui lòng kiểm tra lại cài đặt Secrets trên Streamlit.")
+                    stock_perf = 0.0
+    
+                if df_vnindex is not None and len(df_vnindex) > lookback:
+                    vnindex_perf = ((df_vnindex['Close'].iloc[-1] - df_vnindex['Close'].iloc[-1 - lookback]) / df_vnindex['Close'].iloc[-1 - lookback]) * 100
+                else:
+                    vnindex_perf = 0.0
+                    
+                if stock_perf > vnindex_perf: rs_status = "KHỎE HƠN 💪"
+                elif stock_perf < vnindex_perf: rs_status = "YẾU HƠN ⚠️"
+                else: rs_status = "TƯƠNG ĐƯƠNG ⚖️"
+                
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Giá đóng cửa", f"{last_row['Close']:,.2f}", f"{pct_change:.2f}%")
+                m2.metric("Khối lượng", f"{last_row['Volume']:,.0f}")
+                m3.metric("RSI (14)", f"{last_row['RSI']:.1f}")
+                m4.metric("MA20 Trend", "Tăng" if last_row['Close'] > last_row['MA20'] else "Giảm")
+                
+                st.divider()
+    
+                col_left, col_right = st.columns([2, 1])
+                
+                with col_left:
+                    st.info(f"📈 **Đo lường RS (20 phiên):** Mã **{symbol}** thay đổi **{stock_perf:.2f}%** | VN-Index thay đổi **{vnindex_perf:.2f}%** ➔ Cổ phiếu đang **{rs_status}**")
+                    
+                    st.subheader(f"📊 Biểu đồ {symbol} ({timeframe})")
+                    fig = plot_chart(df, symbol)
+                    st.plotly_chart(fig, use_container_width=True)
+    
+                with col_right:
+                    st.subheader("📋 Chỉ số Kỹ thuật (TA)")
+                    tech_data = {
+                        "Chỉ số": ["MA20", "MA50", "BB Upper", "BB Lower"],
+                        "Giá trị": [f"{last_row['MA20']:,.2f}", f"{last_row['MA50']:,.2f}", f"{last_row['BB_Upper']:,.2f}", f"{last_row['BB_Lower']:,.2f}"]
+                    }
+                    st.table(pd.DataFrame(tech_data))
+                    
+                    # TÌM VÀ SỬA ĐOẠN HIỂN THỊ BẢNG FA (Trong hàm main)
+                    st.subheader("🏢 Chỉ số Cơ bản & Sức khỏe")
+                    fa_df = {
+                        "Chỉ số": ["Vốn hóa thị trường", "Tỷ lệ Nợ / Vốn CSH", "Tỷ suất Cổ tức", "P/E", "P/B", "ROE (%)"],
+                        "Giá trị": [fa_data['market_cap'], fa_data['debt_to_equity'], fa_data['div_yield'], fa_data['pe'], fa_data['pb'], fa_data['roe']]
+                    }
+                    st.table(pd.DataFrame(fa_df))
+                    
+                    status_ma20 = "nằm trên" if last_row['Close'] > last_row['MA20'] else "nằm dưới"
+                    if last_row['Close'] >= last_row['BB_Upper']: bb_status = "Chạm/Vượt Band trên (Quá mua)"
+                    elif last_row['Close'] <= last_row['BB_Lower']: bb_status = "Chạm/Thủng Band dưới (Quá bán)"
+                    else: bb_status = "Dao động bình thường"
+                    
+                    avg_vol = df['Volume'].tail(10).mean()
+                    vol_today = last_row['Volume']
+                    
+                    st.subheader("🤖 AI Khuyến Nghị V3.0 (Kiểm soát Rủi ro)")
+                    
+                    if 'ai_analysis' not in st.session_state:
+                        st.session_state.ai_analysis = ""
+                    if 'analyzed_symbol' not in st.session_state:
+                        st.session_state.analyzed_symbol = ""
+    
+                    if api_key:
+                        if st.button("Phân tích chuyên sâu", use_container_width=True):
+                            analysis = get_ai_analysis(
+                                api_key=api_key, symbol=symbol, current_price=last_row['Close'], 
+                                rsi=last_row['RSI'], ma20=last_row['MA20'], status_ma20=status_ma20, 
+                                bb_status=bb_status, avg_vol=avg_vol, vol_today=vol_today,
+                                stock_perf=stock_perf, vnindex_perf=vnindex_perf, rs_status=rs_status.split()[0],
+                                pe=fa_data['pe'], pb=fa_data['pb'], roe=fa_data['roe'],
+                                market_cap=fa_data['market_cap'], div_yield=fa_data['div_yield'], debt_to_equity=fa_data['debt_to_equity'] # <-- THÊM 3 BIẾN NÀY
+                            )
+                            st.session_state.ai_analysis = analysis
+                            st.session_state.analyzed_symbol = symbol
+    
+                        if st.session_state.ai_analysis and st.session_state.analyzed_symbol == symbol:
+                            st.markdown(st.session_state.ai_analysis)
+                            
+                            st.divider()
+                            
+                            # --- CẬP NHẬT FILE BÁO CÁO TXT ---
+                            report_content = f"BÁO CÁO PHÂN TÍCH MÃ {symbol}\n"
+                            report_content += f"Ngày phân tích: {current_time}\n"
+                            report_content += "-"*40 + "\n"
+                            report_content += f"[Kỹ thuật] Giá: {last_row['Close']:,.2f} | RSI: {last_row['RSI']:.2f} | Khối lượng: {vol_today:,.0f}\n"
+                            report_content += f"[Cơ bản] Vốn hóa: {fa_data['market_cap']} | P/E: {fa_data['pe']} | P/B: {fa_data['pb']} | ROE: {fa_data['roe']}%\n"
+                            report_content += f"[Độ An Toàn] Tỷ suất cổ tức: {fa_data['div_yield']} | Nợ/Vốn CSH: {fa_data['debt_to_equity']}\n"
+                            report_content += f"[Sức mạnh Giá] {symbol} thay đổi {stock_perf:.2f}% vs VN-Index {vnindex_perf:.2f}%\n"
+                            report_content += "-"*40 + "\n\n"
+                            report_content += st.session_state.ai_analysis
+                            
+                            st.download_button(
+                                label="📥 Tải Báo Cáo Nhận Định (TXT)",
+                                data=report_content,
+                                file_name=f"Bao_cao_AI_RiskControl_{symbol}_{date.today()}.txt",
+                                mime="text/plain",
+                                use_container_width=True
+                            )
+                    else:
+                        st.warning("Hệ thống chưa thiết lập API Key. Vui lòng kiểm tra lại cài đặt Secrets trên Streamlit.")
+                
+                st.markdown("---")
+                st.caption(f"🕒 *Dữ liệu được cập nhật lần cuối vào lúc: **{current_time}** (Múi giờ Việt Nam)*")
+                st.markdown("<h5 style='text-align: center; color: #1E88E5;'>Thiết kế và Lập trình bởi: Hoàng Trung Dũng - Emai: dung@hdbn.vip</h5>", unsafe_allow_html=True)
+            else:
+                st.error(f"Không tìm thấy dữ liệu cho mã {symbol}")
+        # --- BƯỚC 2: XÂY DỰNG RADAR QUÉT CỔ PHIẾU TẠI TAB 2 ---
+    with tab2:
+        st.subheader("📡 Radar Quét Tín Hiệu Kỹ Thuật & Dòng Tiền")
+        st.markdown("Hệ thống sẽ tự động phân tích hàng loạt mã cổ phiếu để tìm ra các cơ hội đạt chuẩn.")
+        
+        # Danh sách các mã phổ biến để quét nhanh (Anh có thể gõ thêm tùy ý trên web)
+        default_tickers = "SSI, VND, HPG, HSG, VCB, MBB, MSB, TCB, FPT, MWG, DBC, VNM, GEX, DIG, DXG, PVD"
+        tickers_input = st.text_input("Nhập danh sách mã cần quét (cách nhau bằng dấu phẩy):", default_tickers)
+        
+        # Bộ điều kiện lọc
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            filter_rsi = st.selectbox("🎯 Điều kiện RSI:", [
+                "Không lọc", 
+                "RSI < 30 (Vùng Quá bán - Bắt đáy)", 
+                "RSI > 50 (Xu hướng Tích cực)", 
+                "RSI > 70 (Vùng Quá mua)"
+            ])
+        with col_f2:
+            filter_ma20 = st.selectbox("📈 Điều kiện Xu hướng (MA20):", [
+                "Không lọc", 
+                "Giá vừa cắt lên MA20 (Điểm mua sớm)", 
+                "Giá nằm trên MA20 (Đang Uptrend)"
+            ])
+
+        if st.button("🚀 Kích Hoạt Radar", use_container_width=True):
+            tickers = [x.strip().upper() for x in tickers_input.split(",") if x.strip()]
+            results = []
             
-            st.markdown("---")
-            st.caption(f"🕒 *Dữ liệu được cập nhật lần cuối vào lúc: **{current_time}** (Múi giờ Việt Nam)*")
-            st.markdown("<h5 style='text-align: center; color: #1E88E5;'>Thiết kế và Lập trình bởi: Hoàng Trung Dũng - Emai: dung@hdbn.vip</h5>", unsafe_allow_html=True)
-        else:
-            st.error(f"Không tìm thấy dữ liệu cho mã {symbol}")
+            # Thanh tiến trình chạy cho đẹp mắt
+            progress_text = "Radar đang quét dữ liệu thị trường. Vui lòng đợi..."
+            my_bar = st.progress(0, text=progress_text)
+            
+            for i, t in enumerate(tickers):
+                my_bar.progress((i + 1) / len(tickers), text=f"Đang phân tích tín hiệu mã {t}...")
+                
+                # Tận dụng luôn hàm tải dữ liệu đã viết ở Tab 1
+                df_scan = load_stock_data(t, "Ngày") 
+                
+                if df_scan is not None and len(df_scan) > 2:
+                    last_row_scan = df_scan.iloc[-1]
+                    prev_row_scan = df_scan.iloc[-2]
+                    
+                    passed = True
+                    
+                    # 1. Lọc theo RSI
+                    if filter_rsi == "RSI < 30 (Vùng Quá bán - Bắt đáy)" and last_row_scan['RSI'] >= 30: passed = False
+                    elif filter_rsi == "RSI > 50 (Xu hướng Tích cực)" and last_row_scan['RSI'] <= 50: passed = False
+                    elif filter_rsi == "RSI > 70 (Vùng Quá mua)" and last_row_scan['RSI'] <= 70: passed = False
+                    
+                    # 2. Lọc theo MA20
+                    if filter_ma20 == "Giá vừa cắt lên MA20 (Điểm mua sớm)":
+                        if not (prev_row_scan['Close'] < prev_row_scan['MA20'] and last_row_scan['Close'] > last_row_scan['MA20']):
+                            passed = False
+                    elif filter_ma20 == "Giá nằm trên MA20 (Đang Uptrend)":
+                        if last_row_scan['Close'] < last_row_scan['MA20']:
+                            passed = False
+                    
+                    # Nếu thỏa mãn mọi tiêu chí, đưa vào danh sách kết quả
+                    if passed:
+                        results.append({
+                            "Mã CP": t,
+                            "Giá Đóng Cửa": f"{last_row_scan['Close']:,.2f}",
+                            "RSI": round(last_row_scan['RSI'], 2),
+                            "MA20": f"{last_row_scan['MA20']:,.2f}",
+                            "Khối Lượng": f"{last_row_scan['Volume']:,.0f}"
+                        })
+                        
+            my_bar.empty() # Xóa thanh tiến trình khi chạy xong
+            
+            if results:
+                st.success(f"🎉 Rà soát hoàn tất! Có {len(results)} mã đang đạt chuẩn kỹ thuật của anh.")
+                st.dataframe(pd.DataFrame(results), use_container_width=True, hide_index=True)
+            else:
+                st.warning("Khung thị trường hiện tại không có mã nào trong danh sách thỏa mãn bộ lọc này.")
 
 if __name__ == "__main__":
     main()
