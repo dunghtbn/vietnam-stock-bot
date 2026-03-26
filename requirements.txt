@@ -4,3 +4,4 @@ vnstock==3.4.2
 ta
 plotly
 google-generativeai
+yfinance
