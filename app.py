@@ -79,36 +79,47 @@ def load_vnindex_data(timeframe):
 # --- THAY THẾ TOÀN BỘ HÀM load_fundamental_data CŨ BẰNG ĐOẠN SAU ---
 @st.cache_data(ttl=86400) 
 def load_fundamental_data(symbol):
-    """Sử dụng trực tiếp API lõi của VNDirect (Khớp 100% web) và fallback TCBS"""
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    """Sử dụng API trực tiếp từ SSI (Không cần đăng nhập) và dự phòng TCBS"""
     
-    # NGUỒN 1: Kéo trực tiếp từ backend của VNDirect
+    # Giả lập trình duyệt thật để không bị các trang web chặn (Anti-bot WAF)
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Referer': 'https://iboard.ssi.com.vn/'
+    }
+    
+    # NGUỒN 1: Hút dữ liệu trực tiếp từ SSI (Đúng như ý tưởng của anh)
     try:
-        # Trong hệ thống VNDirect: Mã 51007 là PE, 51008 là PB, 51003 là ROE
-        url_vnd = f"https://finfo-api.vndirect.com.vn/v4/ratios/latest?filter=itemCode:51007,51008,51003&where=code:{symbol}"
-        res = requests.get(url_vnd, headers=headers, timeout=5)
+        url_ssi = f"https://fiin-fundamental.ssi.com.vn/FinancialAnalysis/GetFinancialRatio?language=vi&Ticker={symbol}"
+        res = requests.get(url_ssi, headers=headers, timeout=5)
+        
         if res.status_code == 200:
-            data = res.json().get('data', [])
+            data = res.json()
+            items = data.get('items', [])
             pe = pb = roe = None
-            for item in data:
-                if item['itemCode'] == '51007': pe = item['value']
-                elif item['itemCode'] == '51008': pb = item['value']
-                elif item['itemCode'] == '51003': roe = item['value']
             
+            # Lọc các chỉ số từ danh sách SSI trả về
+            for item in items:
+                code = item.get('code', '')
+                if code == 'PRICE_TO_EARNINGS': pe = item.get('value')
+                elif code == 'PRICE_TO_BOOK': pb = item.get('value')
+                elif code == 'RETURN_ON_EQUITY': roe = item.get('value')
+                
             if pe is not None and pb is not None:
                 roe_val = float(roe) if roe is not None else 0
-                # Nếu hệ thống trả về số thập phân (VD: 0.2005), ta nhân 100 thành 20.05%
-                if -2.0 < roe_val < 2.0: roe_val *= 100 
-                
+                # SSI thường trả ROE ở dạng thập phân (VD: 0.2032 -> 20.32%)
+                if -2.0 < roe_val < 2.0: 
+                    roe_val *= 100 
+                    
                 return {
                     'pe': f"{float(pe):.2f}",
                     'pb': f"{float(pb):.2f}",
                     'roe': f"{roe_val:.2f}"
                 }
     except Exception:
-        pass # Nếu VNDirect lỗi, âm thầm chuyển sang nguồn dự phòng
+        pass # Nếu SSI lỗi mạng, âm thầm chuyển sang nguồn dự phòng
         
-    # NGUỒN 2: Fallback (dự phòng) bằng API trực tiếp của TCBS
+    # NGUỒN 2: Dự phòng bằng API công khai của TCBS (Không cần login)
     try:
         url_tcbs = f"https://apipubaws.tcbs.com.vn/tcanalysis/v1/ticker/{symbol}/overview"
         res = requests.get(url_tcbs, headers=headers, timeout=5)
@@ -130,7 +141,7 @@ def load_fundamental_data(symbol):
     except Exception:
         pass
 
-    # Nếu mã chứng khoán không tồn tại
+    # Nếu cả 2 nguồn lớn đều sập
     return {'pe': 'N/A', 'pb': 'N/A', 'roe': 'N/A'}
 def calculate_indicators(df):
     df['RSI'] = ta.momentum.RSIIndicator(close=df['Close'], window=14).rsi()
