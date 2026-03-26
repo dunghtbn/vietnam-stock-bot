@@ -236,10 +236,7 @@ def main():
     with tab1:
         if df is not None and not df.empty:
             # ---> LƯU Ý: TOÀN BỘ CODE CŨ TỪ ĐOẠN NÀY TRỞ XUỐNG ANH BÔI ĐEN VÀ ẤN PHÍM 'TAB' ĐỂ LÙI LỀ VÀO TRONG 'with tab1:' NHÉ!
-            last_row = df.iloc[-1]
-            # ... (Các cột hiển thị Giá, Biểu đồ, Bảng FA, Nút gọi AI... giữ nguyên) ...
-    
-        with st.sidebar:
+            with st.sidebar:
             st.title("🎛️ Control Panel")
             try: api_key = st.secrets["GEMINI_API_KEY"]
             except KeyError: api_key = ""
@@ -369,6 +366,10 @@ def main():
                 st.markdown("<h5 style='text-align: center; color: #1E88E5;'>Thiết kế và Lập trình bởi: Hoàng Trung Dũng - Emai: dung@hdbn.vip</h5>", unsafe_allow_html=True)
             else:
                 st.error(f"Không tìm thấy dữ liệu cho mã {symbol}")
+            last_row = df.iloc[-1]
+            # ... (Các cột hiển thị Giá, Biểu đồ, Bảng FA, Nút gọi AI... giữ nguyên) ...
+    
+        
         # --- BƯỚC 2: XÂY DỰNG RADAR QUÉT CỔ PHIẾU TẠI TAB 2 ---
     with tab2:
         st.subheader("📡 Radar Quét Tín Hiệu Kỹ Thuật & Dòng Tiền")
