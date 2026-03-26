@@ -60,28 +60,37 @@ def load_data(symbol, timeframe):
 # --- THAY THẾ TOÀN BỘ HÀM load_vnindex_data BẰNG ĐOẠN NÀY ---
 @st.cache_data(ttl=300)
 def load_vnindex_data(timeframe):
-    """Sử dụng Yahoo Finance để lấy VN-Index (Hỗ trợ nến Tuần 100% không bị lỗi)"""
+    """Kéo dữ liệu Ngày (1D) từ KBS và tự động gom thành nến Tuần (1W) bằng Pandas"""
+    end_date = date.today().strftime("%Y-%m-%d")
+    # Luôn lấy lùi lại 2 năm (730 ngày) để đảm bảo không bao giờ bị thiếu nến
+    start_date = (date.today() - timedelta(days=730)).strftime("%Y-%m-%d") 
+    
     try:
-        # Lấy dư 730 ngày (2 năm) để luôn đủ 20 phiên Tuần
-        end_date = date.today() + timedelta(days=1)
-        start_date = date.today() - timedelta(days=730)
-        
-        # Yahoo Finance dùng '1wk' cho Tuần và '1d' cho Ngày
-        interval = '1wk' if timeframe == 'Tuần' else '1d'
-        
-        # ^VNINDEX là mã chuẩn của VN-Index trên Yahoo
-        ticker = yf.Ticker("^VNINDEX")
-        df_index = ticker.history(
-            start=start_date.strftime("%Y-%m-%d"), 
-            end=end_date.strftime("%Y-%m-%d"), 
-            interval=interval
-        )
+        # BƯỚC 1: LUÔN KÉO DỮ LIỆU NGÀY (Vì API của KBS cho nến Ngày rất ổn định)
+        stock = Vnstock().stock(symbol='VNINDEX', source='KBS')
+        df_index = stock.quote.history(start=start_date, end=end_date, interval='1D')
         
         if df_index is not None and not df_index.empty:
-            # Bỏ múi giờ (timezone) của Yahoo để đồng bộ với dữ liệu chứng khoán VN
-            df_index.index = df_index.index.tz_localize(None)
-            return df_index
+            df_index['time'] = pd.to_datetime(df_index['time'])
+            df_index.set_index('time', inplace=True)
             
+            mapping = {'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'}
+            df_index.rename(columns=mapping, inplace=True)
+            df_index['Close'] = pd.to_numeric(df_index['Close'], errors='coerce')
+            df_index = df_index.dropna()
+            
+            # BƯỚC 2: TỰ ĐỘNG GOM NẾN NẾU NGƯỜI DÙNG CHỌN KHUNG TUẦN
+            if timeframe == 'Tuần':
+                # Lệnh resample('W') của Pandas sẽ tự nhóm các ngày trong cùng 1 tuần lại
+                df_index = df_index.resample('W').agg({
+                    'Open': 'first',   # Giá mở cửa của ngày đầu tuần
+                    'High': 'max',     # Giá cao nhất trong tuần
+                    'Low': 'min',      # Giá thấp nhất trong tuần
+                    'Close': 'last',   # Giá đóng cửa của ngày cuối tuần
+                    'Volume': 'sum'    # Tổng khối lượng cả tuần
+                }).dropna()
+                
+            return df_index
     except Exception as e:
         pass
         
