@@ -97,32 +97,50 @@ def load_vnindex_data(timeframe):
     return None
 
 # KHU VỰC ĐÃ NÂNG CẤP: CƠ CHẾ QUÉT 3 LỚP CHO FA
-# --- THAY THẾ TOÀN BỘ HÀM load_fundamental_data BẰNG ĐOẠN NÀY ---
+# --- 1. THAY THẾ HÀM load_fundamental_data ---
 @st.cache_data(ttl=86400) 
 def load_fundamental_data(symbol):
-    """Sử dụng 100% Yahoo Finance: Ổn định, không bị chặn tường lửa"""
+    """Sử dụng 100% Yahoo Finance: Lấy P/E, P/B, ROE, Vốn hóa, Cổ tức, Nợ/Vốn"""
     try:
-        # Trên Yahoo Finance, các mã chứng khoán VN đều có thêm đuôi .VN
-        yahoo_symbol = f"{symbol}.VN"
-        ticker = yf.Ticker(yahoo_symbol)
-        
-        # Lấy toàn bộ thông tin cơ bản
+        ticker = yf.Ticker(f"{symbol}.VN")
         info = ticker.info
         
+        # Lấy dữ liệu cơ bản
         pe = info.get('trailingPE')
         pb = info.get('priceToBook')
         roe = info.get('returnOnEquity')
         
-        # Định dạng lại dữ liệu nếu tồn tại, nếu không có thì trả về N/A
+        # Lấy dữ liệu nâng cao (Độ an toàn)
+        market_cap = info.get('marketCap')
+        div_yield = info.get('dividendYield')
+        debt_to_equity = info.get('debtToEquity')
+        
+        # Định dạng dữ liệu
         pe_str = f"{float(pe):.2f}" if pe is not None else "N/A"
         pb_str = f"{float(pb):.2f}" if pb is not None else "N/A"
         roe_str = f"{float(roe) * 100:.2f}" if roe is not None else "N/A"
         
-        return {'pe': pe_str, 'pb': pb_str, 'roe': roe_str}
+        # Vốn hóa (Quy đổi ra Tỷ VNĐ cho dễ nhìn)
+        market_cap_str = f"{market_cap / 1e9:,.0f} Tỷ" if market_cap is not None else "N/A"
+        
+        # Tỷ suất cổ tức (Thường Yahoo trả 0.05 tương đương 5%)
+        div_yield_str = f"{float(div_yield) * 100:.2f}%" if div_yield is not None else "0.00%"
+        
+        # Nợ / Vốn CSH (Yahoo trả dạng %, VD 40.5 nghĩa là 40.5%)
+        debt_to_equity_str = f"{float(debt_to_equity):.2f}%" if debt_to_equity is not None else "N/A"
+        
+        return {
+            'pe': pe_str, 'pb': pb_str, 'roe': roe_str,
+            'market_cap': market_cap_str, 
+            'div_yield': div_yield_str, 
+            'debt_to_equity': debt_to_equity_str
+        }
         
     except Exception as e:
-        # Nếu có bất kỳ lỗi gì (VD: mã cổ phiếu lạ không có trên Yahoo)
-        return {'pe': 'N/A', 'pb': 'N/A', 'roe': 'N/A'}
+        return {
+            'pe': 'N/A', 'pb': 'N/A', 'roe': 'N/A', 
+            'market_cap': 'N/A', 'div_yield': 'N/A', 'debt_to_equity': 'N/A'
+        }
 def calculate_indicators(df):
     df['RSI'] = ta.momentum.RSIIndicator(close=df['Close'], window=14).rsi()
     df['MA20'] = ta.trend.SMAIndicator(close=df['Close'], window=20).sma_indicator()
@@ -154,14 +172,14 @@ def plot_chart(df, symbol):
     )
     return fig
 
-# --- 4. HÀM GỌI AI ---
-def get_ai_analysis(api_key, symbol, current_price, rsi, ma20, status_ma20, bb_status, avg_vol, vol_today, stock_perf, vnindex_perf, rs_status, pe, pb, roe):
+# --- 2. THAY THẾ HÀM get_ai_analysis ---
+def get_ai_analysis(api_key, symbol, current_price, rsi, ma20, status_ma20, bb_status, avg_vol, vol_today, stock_perf, vnindex_perf, rs_status, pe, pb, roe, market_cap, div_yield, debt_to_equity):
     if not api_key: return "⚠️ Vui lòng nhập API Key để xem phân tích."
     
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-2.5-flash')
     
-    prompt = f"""Role: Bạn là Chuyên gia Phân tích Chứng khoán Top 1 tại Việt Nam. Bạn kết hợp xuất sắc cả Phân tích Kỹ thuật (TA) và Phân tích Cơ bản (FA) để ra quyết định. Không đoán mò.
+    prompt = f"""Role: Bạn là Chuyên gia Phân tích Chứng khoán Top 1 tại Việt Nam. Bạn kết hợp xuất sắc cả Phân tích Kỹ thuật (TA) và Phân tích Cơ bản (FA) để ra quyết định an toàn nhất. Không đoán mò.
 
 Task: Phân tích mã {symbol} dựa trên bộ dữ liệu toàn diện sau:
 
@@ -173,21 +191,23 @@ Task: Phân tích mã {symbol} dựa trên bộ dữ liệu toàn diện sau:
 - Volume: TB 10 phiên là {avg_vol:,.0f}, Hôm nay là {vol_today:,.0f}
 - Sức mạnh giá (20 phiên): Mã {symbol} thay đổi {stock_perf:.2f}%, trong khi VN-Index thay đổi {vnindex_perf:.2f}% -> Cổ phiếu này đang {rs_status} thị trường chung.
 
-2. DỮ LIỆU CƠ BẢN (FA) & ĐỊNH GIÁ:
-- P/E: {pe}
-- P/B: {pb}
-- ROE: {roe}%
+2. DỮ LIỆU CƠ BẢN (FA) & ĐỘ AN TOÀN:
+- Quy mô Vốn hóa: {market_cap} VNĐ
+- Định giá: P/E: {pe} | P/B: {pb}
+- Hiệu quả sinh lời: ROE: {roe}%
+- Tỷ suất cổ tức (Bảo vệ rủi ro): {div_yield}
+- Tỷ lệ Nợ/Vốn CSH (Rủi ro phá sản): {debt_to_equity}
 
 Yêu cầu output format:
-📊 **TỔNG QUAN:** [Đánh giá xu hướng kỹ thuật ngắn hạn + Định giá cơ bản đắt/rẻ + Sức mạnh RS]
+📊 **TỔNG QUAN:** [Đánh giá xu hướng kỹ thuật + Sức khỏe tài chính dựa trên Cổ tức & Tỷ lệ Nợ + Định giá đắt/rẻ]
 🎯 **KHUYẾN NGHỊ:** [MUA MẠNH / MUA THĂM DÒ / BÁN / QUAN SÁT]
 1. Vùng mua an toàn: [Giá A - Giá B]
 2. Mục tiêu chốt lời (Target): [Giá C] (Ngắn hạn)
-3. Điểm cắt lỗ (Stoploss): [Giá D] (Bắt buộc phải có)
-💡 **LÝ DO:** [Giải thích sắc bén: Tại sao chọn hành động này dựa trên sự hội tụ giữa đồ thị TA và nền tảng FA]
+3. Điểm cắt lỗ (Stoploss): [Giá D] (Bắt buộc)
+💡 **LÝ DO:** [Giải thích sắc bén sự hội tụ giữa đồ thị và sức khỏe tài chính doanh nghiệp]
 """
     try:
-        with st.spinner('🤖 AI đang phân tích dữ liệu Hybrid (FA + TA)...'):
+        with st.spinner('🤖 AI đang đánh giá Toàn diện rủi ro (FA + TA)...'):
             response = model.generate_content(prompt)
             return response.text
     except Exception as e:
@@ -264,10 +284,11 @@ def main():
                 }
                 st.table(pd.DataFrame(tech_data))
                 
-                st.subheader("🏢 Chỉ số Cơ bản (FA)")
+                # TÌM VÀ SỬA ĐOẠN HIỂN THỊ BẢNG FA (Trong hàm main)
+                st.subheader("🏢 Chỉ số Cơ bản & Sức khỏe")
                 fa_df = {
-                    "Chỉ số": ["P/E", "P/B", "ROE (%)"],
-                    "Giá trị": [fa_data['pe'], fa_data['pb'], fa_data['roe']]
+                    "Chỉ số": ["Vốn hóa thị trường", "Tỷ lệ Nợ / Vốn CSH", "Tỷ suất Cổ tức", "P/E", "P/B", "ROE (%)"],
+                    "Giá trị": [fa_data['market_cap'], fa_data['debt_to_equity'], fa_data['div_yield'], fa_data['pe'], fa_data['pb'], fa_data['roe']]
                 }
                 st.table(pd.DataFrame(fa_df))
                 
@@ -279,9 +300,8 @@ def main():
                 avg_vol = df['Volume'].tail(10).mean()
                 vol_today = last_row['Volume']
                 
-                st.subheader("🤖 AI Khuyến Nghị V2.0")
+                st.subheader("🤖 AI Khuyến Nghị V3.0 (Kiểm soát Rủi ro)")
                 
-                # --- XỬ LÝ NÚT PHÂN TÍCH VÀ TẢI BÁO CÁO ---
                 if 'ai_analysis' not in st.session_state:
                     st.session_state.ai_analysis = ""
                 if 'analyzed_symbol' not in st.session_state:
@@ -294,7 +314,8 @@ def main():
                             rsi=last_row['RSI'], ma20=last_row['MA20'], status_ma20=status_ma20, 
                             bb_status=bb_status, avg_vol=avg_vol, vol_today=vol_today,
                             stock_perf=stock_perf, vnindex_perf=vnindex_perf, rs_status=rs_status.split()[0],
-                            pe=fa_data['pe'], pb=fa_data['pb'], roe=fa_data['roe']
+                            pe=fa_data['pe'], pb=fa_data['pb'], roe=fa_data['roe'],
+                            market_cap=fa_data['market_cap'], div_yield=fa_data['div_yield'], debt_to_equity=fa_data['debt_to_equity'] # <-- THÊM 3 BIẾN NÀY
                         )
                         st.session_state.ai_analysis = analysis
                         st.session_state.analyzed_symbol = symbol
@@ -304,11 +325,13 @@ def main():
                         
                         st.divider()
                         
+                        # --- CẬP NHẬT FILE BÁO CÁO TXT ---
                         report_content = f"BÁO CÁO PHÂN TÍCH MÃ {symbol}\n"
                         report_content += f"Ngày phân tích: {current_time}\n"
                         report_content += "-"*40 + "\n"
-                        report_content += f"[Thông số Kỹ thuật] Giá: {last_row['Close']:,.2f} | RSI: {last_row['RSI']:.2f} | Khối lượng: {vol_today:,.0f}\n"
-                        report_content += f"[Thông số Cơ bản] P/E: {fa_data['pe']} | P/B: {fa_data['pb']} | ROE: {fa_data['roe']}%\n"
+                        report_content += f"[Kỹ thuật] Giá: {last_row['Close']:,.2f} | RSI: {last_row['RSI']:.2f} | Khối lượng: {vol_today:,.0f}\n"
+                        report_content += f"[Cơ bản] Vốn hóa: {fa_data['market_cap']} | P/E: {fa_data['pe']} | P/B: {fa_data['pb']} | ROE: {fa_data['roe']}%\n"
+                        report_content += f"[Độ An Toàn] Tỷ suất cổ tức: {fa_data['div_yield']} | Nợ/Vốn CSH: {fa_data['debt_to_equity']}\n"
                         report_content += f"[Sức mạnh Giá] {symbol} thay đổi {stock_perf:.2f}% vs VN-Index {vnindex_perf:.2f}%\n"
                         report_content += "-"*40 + "\n\n"
                         report_content += st.session_state.ai_analysis
@@ -316,7 +339,7 @@ def main():
                         st.download_button(
                             label="📥 Tải Báo Cáo Nhận Định (TXT)",
                             data=report_content,
-                            file_name=f"Bao_cao_AI_{symbol}_{date.today()}.txt",
+                            file_name=f"Bao_cao_AI_RiskControl_{symbol}_{date.today()}.txt",
                             mime="text/plain",
                             use_container_width=True
                         )
