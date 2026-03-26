@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import ta
 import plotly.graph_objects as go
-from vnstock import Vnstock  # Cú pháp import mới của v3
+from vnstock import Vnstock
 from datetime import date, timedelta, datetime, timezone
 import google.generativeai as genai
 
@@ -31,7 +31,6 @@ st.markdown("""
 
 @st.cache_data(ttl=300)
 def load_data(symbol, timeframe):
-    """Lấy dữ liệu giá cổ phiếu"""
     end_date = date.today().strftime("%Y-%m-%d")
     start_date = (date.today() - timedelta(days=730)).strftime("%Y-%m-%d") 
     
@@ -58,9 +57,8 @@ def load_data(symbol, timeframe):
 
 @st.cache_data(ttl=300)
 def load_vnindex_data(timeframe):
-    """Lấy dữ liệu VN-Index để đo sức mạnh RS"""
     end_date = date.today().strftime("%Y-%m-%d")
-    start_date = (date.today() - timedelta(days=100)).strftime("%Y-%m-%d") # Lấy dư ra để đủ 20 phiên
+    start_date = (date.today() - timedelta(days=100)).strftime("%Y-%m-%d") 
     
     try:
         resolution = '1W' if timeframe == 'Tuần' else '1D'
@@ -76,33 +74,46 @@ def load_vnindex_data(timeframe):
     except Exception:
         return None
 
-@st.cache_data(ttl=86400) # Cache 1 ngày
+# KHU VỰC ĐÃ NÂNG CẤP: CƠ CHẾ QUÉT 3 LỚP CHO FA
+@st.cache_data(ttl=86400) 
 def load_fundamental_data(symbol):
-    """Lấy dữ liệu Cơ bản (P/E, P/B, ROE)"""
-    try:
-        stock = Vnstock().stock(symbol=symbol, source='TCBS') # VCI hoặc TCBS thường trả FA tốt
-        df_overview = stock.company.overview()
-        
-        if df_overview is not None and not df_overview.empty:
-            # Chuyển tên cột về chữ thường để tránh lỗi in hoa/thường
-            df_overview.columns = [c.lower() for c in df_overview.columns]
+    """Lấy dữ liệu Cơ bản (P/E, P/B, ROE) với cơ chế Fallback chống lỗi N/A"""
+    sources = ['VND', 'TCBS', 'VCI'] # Thử lần lượt các nguồn tốt nhất
+    
+    for src in sources:
+        try:
+            stock = Vnstock().stock(symbol=symbol, source=src)
+            df_overview = stock.company.overview()
             
-            pe = df_overview['pe'].iloc[0] if 'pe' in df_overview.columns else 'N/A'
-            pb = df_overview['pb'].iloc[0] if 'pb' in df_overview.columns else 'N/A'
-            roe = df_overview['roe'].iloc[0] * 100 if 'roe' in df_overview.columns else 'N/A'
+            if df_overview is not None and not df_overview.empty:
+                # Đưa hết tên cột về chữ thường
+                df_overview.columns = [str(c).lower().strip() for c in df_overview.columns]
+                
+                pe = df_overview.get('pe', pd.Series([None])).iloc[0]
+                pb = df_overview.get('pb', pd.Series([None])).iloc[0]
+                roe = df_overview.get('roe', pd.Series([None])).iloc[0]
+                
+                if pd.notna(pe) and pd.notna(pb): # Chỉ cần lấy được PE, PB là dừng
+                    pe_str = f"{float(pe):.2f}"
+                    pb_str = f"{float(pb):.2f}"
+                    
+                    if pd.notna(roe):
+                        roe_val = float(roe)
+                        # Xử lý đồng nhất: Nguồn TCBS trả 0.15, Nguồn VND trả 15 cho ROE 15%
+                        if -2.0 < roe_val < 2.0: 
+                            roe_val *= 100
+                        roe_str = f"{roe_val:.2f}"
+                    else:
+                        roe_str = "N/A"
+                        
+                    return {'pe': pe_str, 'pb': pb_str, 'roe': roe_str}
+        except Exception:
+            continue # Nếu nguồn này lỗi, âm thầm bỏ qua và thử nguồn tiếp theo
             
-            # Format số
-            pe = f"{pe:.2f}" if isinstance(pe, (int, float)) else pe
-            pb = f"{pb:.2f}" if isinstance(pb, (int, float)) else pb
-            roe = f"{roe:.2f}" if isinstance(roe, (int, float)) else roe
-            
-            return {'pe': pe, 'pb': pb, 'roe': roe}
-    except Exception:
-        pass
+    # Nếu quét qua cả 3 nguồn đều sập thì mới chịu thua báo N/A
     return {'pe': 'N/A', 'pb': 'N/A', 'roe': 'N/A'}
 
 def calculate_indicators(df):
-    """Tính toán các chỉ báo kỹ thuật bằng thư viện 'ta'"""
     df['RSI'] = ta.momentum.RSIIndicator(close=df['Close'], window=14).rsi()
     df['MA20'] = ta.trend.SMAIndicator(close=df['Close'], window=20).sma_indicator()
     df['MA50'] = ta.trend.SMAIndicator(close=df['Close'], window=50).sma_indicator()
@@ -112,7 +123,7 @@ def calculate_indicators(df):
     df['BB_Lower'] = indicator_bb.bollinger_lband()
     return df
 
-# --- 3. HÀM VẼ BIỂU ĐỒ (PLOTLY) ---
+# --- 3. HÀM VẼ BIỂU ĐỒ ---
 def plot_chart(df, symbol):
     plot_df = df.tail(150)
     fig = go.Figure()
@@ -133,7 +144,7 @@ def plot_chart(df, symbol):
     )
     return fig
 
-# --- 4. HÀM GỌI AI (NÂNG CẤP V2.0) ---
+# --- 4. HÀM GỌI AI ---
 def get_ai_analysis(api_key, symbol, current_price, rsi, ma20, status_ma20, bb_status, avg_vol, vol_today, stock_perf, vnindex_perf, rs_status, pe, pb, roe):
     if not api_key: return "⚠️ Vui lòng nhập API Key để xem phân tích."
     
@@ -185,10 +196,10 @@ def main():
         try: api_key = st.secrets["GEMINI_API_KEY"]
         except KeyError: api_key = ""
             
-        symbol = st.text_input("Mã Cổ Phiếu", value="FPT").upper()
+        symbol = st.text_input("Mã Cổ Phiếu", value="DBC").upper()
         timeframe = st.selectbox("Khung thời gian", ["Ngày", "Tuần"])
         st.info("💡 Mẹo: Chọn 'Tuần' để xem xu hướng dài hạn.")
-        st.success("✨ V2.0: Đã tích hợp Phân tích Cơ bản & Sức mạnh RS")
+        st.success("✨ V2.0: Tích hợp Đa luồng Dữ liệu FA & Báo cáo Tự động")
     
     if symbol:
         df = load_data(symbol, timeframe)
@@ -203,7 +214,6 @@ def main():
             change = last_row['Close'] - prev_row['Close']
             pct_change = (change / prev_row['Close']) * 100
             
-            # Tính hiệu suất 20 phiên (Sức mạnh RS)
             lookback = 20 if len(df) >= 20 else len(df) - 1
             if lookback > 0:
                 stock_perf = ((last_row['Close'] - df['Close'].iloc[-1 - lookback]) / df['Close'].iloc[-1 - lookback]) * 100
@@ -219,7 +229,6 @@ def main():
             elif stock_perf < vnindex_perf: rs_status = "YẾU HƠN ⚠️"
             else: rs_status = "TƯƠNG ĐƯƠNG ⚖️"
             
-            # Hiển thị Metrics Header
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Giá đóng cửa", f"{last_row['Close']:,.2f}", f"{pct_change:.2f}%")
             m2.metric("Khối lượng", f"{last_row['Volume']:,.0f}")
@@ -231,7 +240,6 @@ def main():
             col_left, col_right = st.columns([2, 1])
             
             with col_left:
-                # Banner thông báo sức mạnh giá
                 st.info(f"📈 **Đo lường RS (20 phiên):** Mã **{symbol}** thay đổi **{stock_perf:.2f}%** | VN-Index thay đổi **{vnindex_perf:.2f}%** ➔ Cổ phiếu đang **{rs_status}**")
                 
                 st.subheader(f"📊 Biểu đồ {symbol} ({timeframe})")
@@ -263,7 +271,7 @@ def main():
                 
                 st.subheader("🤖 AI Khuyến Nghị V2.0")
                 
-                # --- KHỞI TẠO BỘ NHỚ TẠM (SESSION STATE) ---
+                # --- XỬ LÝ NÚT PHÂN TÍCH VÀ TẢI BÁO CÁO ---
                 if 'ai_analysis' not in st.session_state:
                     st.session_state.ai_analysis = ""
                 if 'analyzed_symbol' not in st.session_state:
@@ -271,7 +279,6 @@ def main():
 
                 if api_key:
                     if st.button("Phân tích chuyên sâu", use_container_width=True):
-                        # Gọi AI và lưu kết quả vào bộ nhớ tạm
                         analysis = get_ai_analysis(
                             api_key=api_key, symbol=symbol, current_price=last_row['Close'], 
                             rsi=last_row['RSI'], ma20=last_row['MA20'], status_ma20=status_ma20, 
@@ -282,13 +289,11 @@ def main():
                         st.session_state.ai_analysis = analysis
                         st.session_state.analyzed_symbol = symbol
 
-                    # --- HIỂN THỊ KẾT QUẢ VÀ NÚT TẢI BÁO CÁO ---
                     if st.session_state.ai_analysis and st.session_state.analyzed_symbol == symbol:
                         st.markdown(st.session_state.ai_analysis)
                         
                         st.divider()
                         
-                        # Tạo nội dung file báo cáo
                         report_content = f"BÁO CÁO PHÂN TÍCH MÃ {symbol}\n"
                         report_content += f"Ngày phân tích: {current_time}\n"
                         report_content += "-"*40 + "\n"
@@ -298,7 +303,6 @@ def main():
                         report_content += "-"*40 + "\n\n"
                         report_content += st.session_state.ai_analysis
                         
-                        # Hiển thị nút Tải xuống
                         st.download_button(
                             label="📥 Tải Báo Cáo Nhận Định (TXT)",
                             data=report_content,
