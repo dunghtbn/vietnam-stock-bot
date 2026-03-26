@@ -58,16 +58,17 @@ def load_data(symbol, timeframe):
         return None
 
 # --- THAY THẾ TOÀN BỘ HÀM load_vnindex_data BẰNG ĐOẠN SAU ---
+# --- TÌM VÀ SỬA LẠI HÀM NÀY ---
 @st.cache_data(ttl=300)
 def load_vnindex_data(timeframe):
-    """Lấy dữ liệu VN-Index đồng bộ nguồn KBS với Cổ phiếu (Đảm bảo 100% không bị 0.00%)"""
+    """Lấy dữ liệu VN-Index đồng bộ nguồn KBS"""
     end_date = date.today().strftime("%Y-%m-%d")
-    start_date = (date.today() - timedelta(days=60)).strftime("%Y-%m-%d") 
+    
+    # SỬA DÒNG NÀY: Đổi 60 thành 730 để luôn đủ 20 phiên dù là Ngày hay Tuần
+    start_date = (date.today() - timedelta(days=730)).strftime("%Y-%m-%d") 
     
     try:
         resolution = '1W' if timeframe == 'Tuần' else '1D'
-        
-        # SỬ DỤNG NGUỒN 'KBS' CHUẨN XÁC GIỐNG NHƯ HÀM LẤY CỔ PHIẾU
         stock = Vnstock().stock(symbol='VNINDEX', source='KBS')
         df_index = stock.quote.history(start=start_date, end=end_date, interval=resolution)
         
@@ -75,15 +76,13 @@ def load_vnindex_data(timeframe):
             df_index['time'] = pd.to_datetime(df_index['time'])
             df_index.set_index('time', inplace=True)
             
-            # Đồng bộ tên cột
             mapping = {'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'}
             df_index.rename(columns=mapping, inplace=True)
             
             df_index['Close'] = pd.to_numeric(df_index['Close'], errors='coerce')
             return df_index.dropna()
-            
     except Exception as e:
-        pass # Nếu lỗi sẽ âm thầm trả về None
+        pass
         
     return None
 
