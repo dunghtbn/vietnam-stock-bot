@@ -80,7 +80,7 @@ def load_vnindex_data(timeframe):
 def load_fundamental_data(symbol):
     """Lấy dữ liệu Cơ bản (P/E, P/B, ROE)"""
     try:
-        stock = Vnstock().stock(symbol=symbol, source='VCI') # VCI hoặc TCBS thường trả FA tốt
+        stock = Vnstock().stock(symbol=symbol, source='TCBS') # VCI hoặc TCBS thường trả FA tốt
         df_overview = stock.company.overview()
         
         if df_overview is not None and not df_overview.empty:
@@ -262,16 +262,50 @@ def main():
                 vol_today = last_row['Volume']
                 
                 st.subheader("🤖 AI Khuyến Nghị V2.0")
+                
+                # --- KHỞI TẠO BỘ NHỚ TẠM (SESSION STATE) ---
+                if 'ai_analysis' not in st.session_state:
+                    st.session_state.ai_analysis = ""
+                if 'analyzed_symbol' not in st.session_state:
+                    st.session_state.analyzed_symbol = ""
+
                 if api_key:
                     if st.button("Phân tích chuyên sâu", use_container_width=True):
+                        # Gọi AI và lưu kết quả vào bộ nhớ tạm
                         analysis = get_ai_analysis(
                             api_key=api_key, symbol=symbol, current_price=last_row['Close'], 
                             rsi=last_row['RSI'], ma20=last_row['MA20'], status_ma20=status_ma20, 
                             bb_status=bb_status, avg_vol=avg_vol, vol_today=vol_today,
-                            stock_perf=stock_perf, vnindex_perf=vnindex_perf, rs_status=rs_status.split()[0], # Bỏ icon khi gửi cho AI
+                            stock_perf=stock_perf, vnindex_perf=vnindex_perf, rs_status=rs_status.split()[0],
                             pe=fa_data['pe'], pb=fa_data['pb'], roe=fa_data['roe']
                         )
-                        st.markdown(analysis)
+                        st.session_state.ai_analysis = analysis
+                        st.session_state.analyzed_symbol = symbol
+
+                    # --- HIỂN THỊ KẾT QUẢ VÀ NÚT TẢI BÁO CÁO ---
+                    if st.session_state.ai_analysis and st.session_state.analyzed_symbol == symbol:
+                        st.markdown(st.session_state.ai_analysis)
+                        
+                        st.divider()
+                        
+                        # Tạo nội dung file báo cáo
+                        report_content = f"BÁO CÁO PHÂN TÍCH MÃ {symbol}\n"
+                        report_content += f"Ngày phân tích: {current_time}\n"
+                        report_content += "-"*40 + "\n"
+                        report_content += f"[Thông số Kỹ thuật] Giá: {last_row['Close']:,.2f} | RSI: {last_row['RSI']:.2f} | Khối lượng: {vol_today:,.0f}\n"
+                        report_content += f"[Thông số Cơ bản] P/E: {fa_data['pe']} | P/B: {fa_data['pb']} | ROE: {fa_data['roe']}%\n"
+                        report_content += f"[Sức mạnh Giá] {symbol} thay đổi {stock_perf:.2f}% vs VN-Index {vnindex_perf:.2f}%\n"
+                        report_content += "-"*40 + "\n\n"
+                        report_content += st.session_state.ai_analysis
+                        
+                        # Hiển thị nút Tải xuống
+                        st.download_button(
+                            label="📥 Tải Báo Cáo Nhận Định (TXT)",
+                            data=report_content,
+                            file_name=f"Bao_cao_AI_{symbol}_{date.today()}.txt",
+                            mime="text/plain",
+                            use_container_width=True
+                        )
                 else:
                     st.warning("Hệ thống chưa thiết lập API Key. Vui lòng kiểm tra lại cài đặt Secrets trên Streamlit.")
             
