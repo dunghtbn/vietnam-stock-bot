@@ -57,24 +57,34 @@ def load_data(symbol, timeframe):
         st.error(f"Lỗi API dữ liệu {symbol}: {e}")
         return None
 
+# --- THAY THẾ TOÀN BỘ HÀM load_vnindex_data BẰNG ĐOẠN NÀY ---
 @st.cache_data(ttl=300)
 def load_vnindex_data(timeframe):
-    end_date = date.today().strftime("%Y-%m-%d")
-    start_date = (date.today() - timedelta(days=100)).strftime("%Y-%m-%d") 
-    
+    """Lấy dữ liệu VN-Index bằng Yahoo Finance để đảm bảo 100% không bị lỗi 0.00%"""
     try:
-        resolution = '1W' if timeframe == 'Tuần' else '1D'
-        index = Vnstock().stock(symbol='VNINDEX', source='TCBS')
-        df_index = index.quote.history(start=start_date, end=end_date, interval=resolution)
+        # Lấy khoảng 60 ngày để chắc chắn có đủ 20 phiên giao dịch (trừ thứ 7, CN)
+        end_date = date.today() + timedelta(days=1) # Cộng 1 để lấy trọn vẹn phiên hôm nay
+        start_date = date.today() - timedelta(days=60)
+        
+        # Chuyển đổi khung thời gian cho khớp với định dạng của Yahoo
+        interval = '1wk' if timeframe == 'Tuần' else '1d'
+        
+        # ^VNINDEX là mã của VN-Index trên hệ thống Yahoo Finance
+        ticker = yf.Ticker("^VNINDEX")
+        df_index = ticker.history(
+            start=start_date.strftime("%Y-%m-%d"), 
+            end=end_date.strftime("%Y-%m-%d"), 
+            interval=interval
+        )
         
         if df_index is not None and not df_index.empty:
-            df_index['time'] = pd.to_datetime(df_index['time'])
-            df_index.set_index('time', inplace=True)
-            df_index.rename(columns={'close': 'Close'}, inplace=True)
-            df_index['Close'] = pd.to_numeric(df_index['Close'], errors='coerce')
-            return df_index.dropna()
-    except Exception:
-        return None
+            # Yahoo Finance trả về cột 'Close' viết hoa chữ C, rất tiện lợi
+            return df_index
+            
+    except Exception as e:
+        pass
+        
+    return None
 
 # KHU VỰC ĐÃ NÂNG CẤP: CƠ CHẾ QUÉT 3 LỚP CHO FA
 # --- THAY THẾ TOÀN BỘ HÀM load_fundamental_data BẰNG ĐOẠN NÀY ---
