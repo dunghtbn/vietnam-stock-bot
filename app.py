@@ -123,10 +123,19 @@ def load_fundamental_data(symbol):
         # Vốn hóa (Quy đổi ra Tỷ VNĐ cho dễ nhìn)
         market_cap_str = f"{market_cap / 1e9:,.0f} Tỷ" if market_cap is not None else "N/A"
         
-        # Tỷ suất cổ tức (Thường Yahoo trả 0.05 tương đương 5%)
-        div_yield_str = f"{float(div_yield) * 100:.2f}%" if div_yield is not None else "0.00%"
+        # TỶ SUẤT CỔ TỨC: Bộ lọc xử lý lỗi sai tỷ lệ của Yahoo Finance
+        if div_yield is not None:
+            dy_val = float(div_yield)
+            # Nếu giá trị > 1 (tức là Yahoo đã nhân sẵn 100, VD: trả về 8.62)
+            if dy_val > 1:
+                div_yield_str = f"{dy_val:.2f}%"
+            # Nếu giá trị < 1 (tức là Yahoo trả chuẩn dạng thập phân 0.0862)
+            else:
+                div_yield_str = f"{dy_val * 100:.2f}%"
+        else:
+            div_yield_str = "0.00%"
         
-        # Nợ / Vốn CSH (Yahoo trả dạng %, VD 40.5 nghĩa là 40.5%)
+        # Nợ / Vốn CSH (Yahoo trả dạng %, VD 27.42 nghĩa là 27.42%)
         debt_to_equity_str = f"{float(debt_to_equity):.2f}%" if debt_to_equity is not None else "N/A"
         
         return {
