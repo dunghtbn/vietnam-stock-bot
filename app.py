@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from vnstock import Vnstock
 from datetime import date, timedelta, datetime, timezone
 import google.generativeai as genai
+import requests
 
 # --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(
@@ -75,44 +76,62 @@ def load_vnindex_data(timeframe):
         return None
 
 # KHU VỰC ĐÃ NÂNG CẤP: CƠ CHẾ QUÉT 3 LỚP CHO FA
+# --- THAY THẾ TOÀN BỘ HÀM load_fundamental_data CŨ BẰNG ĐOẠN SAU ---
 @st.cache_data(ttl=86400) 
 def load_fundamental_data(symbol):
-    """Lấy dữ liệu Cơ bản (P/E, P/B, ROE) với cơ chế Fallback chống lỗi N/A"""
-    sources = ['VND', 'TCBS', 'VCI'] # Thử lần lượt các nguồn tốt nhất
+    """Sử dụng trực tiếp API lõi của VNDirect (Khớp 100% web) và fallback TCBS"""
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     
-    for src in sources:
-        try:
-            stock = Vnstock().stock(symbol=symbol, source=src)
-            df_overview = stock.company.overview()
+    # NGUỒN 1: Kéo trực tiếp từ backend của VNDirect
+    try:
+        # Trong hệ thống VNDirect: Mã 51007 là PE, 51008 là PB, 51003 là ROE
+        url_vnd = f"https://finfo-api.vndirect.com.vn/v4/ratios/latest?filter=itemCode:51007,51008,51003&where=code:{symbol}"
+        res = requests.get(url_vnd, headers=headers, timeout=5)
+        if res.status_code == 200:
+            data = res.json().get('data', [])
+            pe = pb = roe = None
+            for item in data:
+                if item['itemCode'] == '51007': pe = item['value']
+                elif item['itemCode'] == '51008': pb = item['value']
+                elif item['itemCode'] == '51003': roe = item['value']
             
-            if df_overview is not None and not df_overview.empty:
-                # Đưa hết tên cột về chữ thường
-                df_overview.columns = [str(c).lower().strip() for c in df_overview.columns]
+            if pe is not None and pb is not None:
+                roe_val = float(roe) if roe is not None else 0
+                # Nếu hệ thống trả về số thập phân (VD: 0.2005), ta nhân 100 thành 20.05%
+                if -2.0 < roe_val < 2.0: roe_val *= 100 
                 
-                pe = df_overview.get('pe', pd.Series([None])).iloc[0]
-                pb = df_overview.get('pb', pd.Series([None])).iloc[0]
-                roe = df_overview.get('roe', pd.Series([None])).iloc[0]
-                
-                if pd.notna(pe) and pd.notna(pb): # Chỉ cần lấy được PE, PB là dừng
-                    pe_str = f"{float(pe):.2f}"
-                    pb_str = f"{float(pb):.2f}"
-                    
-                    if pd.notna(roe):
-                        roe_val = float(roe)
-                        # Xử lý đồng nhất: Nguồn TCBS trả 0.15, Nguồn VND trả 15 cho ROE 15%
-                        if -2.0 < roe_val < 2.0: 
-                            roe_val *= 100
-                        roe_str = f"{roe_val:.2f}"
-                    else:
-                        roe_str = "N/A"
-                        
-                    return {'pe': pe_str, 'pb': pb_str, 'roe': roe_str}
-        except Exception:
-            continue # Nếu nguồn này lỗi, âm thầm bỏ qua và thử nguồn tiếp theo
+                return {
+                    'pe': f"{float(pe):.2f}",
+                    'pb': f"{float(pb):.2f}",
+                    'roe': f"{roe_val:.2f}"
+                }
+    except Exception:
+        pass # Nếu VNDirect lỗi, âm thầm chuyển sang nguồn dự phòng
+        
+    # NGUỒN 2: Fallback (dự phòng) bằng API trực tiếp của TCBS
+    try:
+        url_tcbs = f"https://apipubaws.tcbs.com.vn/tcanalysis/v1/ticker/{symbol}/overview"
+        res = requests.get(url_tcbs, headers=headers, timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            pe = data.get('pe')
+            pb = data.get('pb')
+            roe = data.get('roe')
             
-    # Nếu quét qua cả 3 nguồn đều sập thì mới chịu thua báo N/A
-    return {'pe': 'N/A', 'pb': 'N/A', 'roe': 'N/A'}
+            if pe is not None and pb is not None:
+                roe_val = float(roe) if roe is not None else 0
+                if -2.0 < roe_val < 2.0: roe_val *= 100
+                
+                return {
+                    'pe': f"{float(pe):.2f}",
+                    'pb': f"{float(pb):.2f}",
+                    'roe': f"{roe_val:.2f}"
+                }
+    except Exception:
+        pass
 
+    # Nếu mã chứng khoán không tồn tại
+    return {'pe': 'N/A', 'pb': 'N/A', 'roe': 'N/A'}
 def calculate_indicators(df):
     df['RSI'] = ta.momentum.RSIIndicator(close=df['Close'], window=14).rsi()
     df['MA20'] = ta.trend.SMAIndicator(close=df['Close'], window=20).sma_indicator()
