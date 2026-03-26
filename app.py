@@ -6,6 +6,7 @@ from vnstock import Vnstock
 from datetime import date, timedelta, datetime, timezone
 import google.generativeai as genai
 import requests
+import yfinance as yf
 
 # --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(
@@ -76,72 +77,32 @@ def load_vnindex_data(timeframe):
         return None
 
 # KHU VỰC ĐÃ NÂNG CẤP: CƠ CHẾ QUÉT 3 LỚP CHO FA
-# --- THAY THẾ TOÀN BỘ HÀM load_fundamental_data CŨ BẰNG ĐOẠN SAU ---
+# --- THAY THẾ TOÀN BỘ HÀM load_fundamental_data BẰNG ĐOẠN NÀY ---
 @st.cache_data(ttl=86400) 
 def load_fundamental_data(symbol):
-    """Sử dụng API từ các nền tảng thân thiện với máy chủ Đám mây (Không chặn Cloudflare)"""
-    
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-        'Accept': 'application/json'
-    }
-    
-    # NGUỒN 1: SIMPLIZE (Nền tảng mở, dữ liệu rất chính xác và hiếm khi chặn bot)
+    """Sử dụng 100% Yahoo Finance: Ổn định, không bị chặn tường lửa"""
     try:
-        url_simp = f"https://api.simplize.vn/api/company/fi/ratios/{symbol}"
-        res = requests.get(url_simp, headers=headers, timeout=5)
-        if res.status_code == 200:
-            data = res.json().get('data', {})
-            pe = data.get('pe')
-            pb = data.get('pb')
-            roe = data.get('roe')
-            
-            if pe is not None and pb is not None:
-                roe_val = float(roe) if roe is not None else 0
-                # Chuyển đổi định dạng số thập phân sang phần trăm nếu cần
-                if -2.0 < roe_val < 2.0: roe_val *= 100
-                return {'pe': f"{float(pe):.2f}", 'pb': f"{float(pb):.2f}", 'roe': f"{roe_val:.2f}"}
-    except Exception:
-        pass # Chuyển nguồn nếu Simplize bảo trì
-
-    # NGUỒN 2: TCBS AWS API (Máy chủ công khai, rất thân thiện)
-    try:
-        url_tcbs = f"https://apipubaws.tcbs.com.vn/tcanalysis/v1/ticker/{symbol}/overview"
-        res = requests.get(url_tcbs, headers=headers, timeout=5)
-        if res.status_code == 200:
-            data = res.json()
-            pe = data.get('pe')
-            pb = data.get('pb')
-            roe = data.get('roe')
-            
-            if pe is not None and pb is not None:
-                roe_val = float(roe) if roe is not None else 0
-                if -2.0 < roe_val < 2.0: roe_val *= 100
-                return {'pe': f"{float(pe):.2f}", 'pb': f"{float(pb):.2f}", 'roe': f"{roe_val:.2f}"}
-    except Exception:
-        pass
+        # Trên Yahoo Finance, các mã chứng khoán VN đều có thêm đuôi .VN
+        yahoo_symbol = f"{symbol}.VN"
+        ticker = yf.Ticker(yahoo_symbol)
         
-    # NGUỒN 3: VNDIRECT (Thử vận may cuối cùng)
-    try:
-        url_vnd = f"https://finfo-api.vndirect.com.vn/v4/ratios/latest?filter=itemCode:51007,51008,51003&where=code:{symbol}"
-        res = requests.get(url_vnd, headers=headers, timeout=5)
-        if res.status_code == 200:
-            data = res.json().get('data', [])
-            pe = pb = roe = None
-            for item in data:
-                if item['itemCode'] == '51007': pe = item['value']
-                elif item['itemCode'] == '51008': pb = item['value']
-                elif item['itemCode'] == '51003': roe = item['value']
-            
-            if pe is not None and pb is not None:
-                roe_val = float(roe) if roe is not None else 0
-                if -2.0 < roe_val < 2.0: roe_val *= 100 
-                return {'pe': f"{float(pe):.2f}", 'pb': f"{float(pb):.2f}", 'roe': f"{roe_val:.2f}"}
-    except Exception:
-        pass 
-
-    # Nếu tất cả đều không thể kết nối
-    return {'pe': 'N/A', 'pb': 'N/A', 'roe': 'N/A'}
+        # Lấy toàn bộ thông tin cơ bản
+        info = ticker.info
+        
+        pe = info.get('trailingPE')
+        pb = info.get('priceToBook')
+        roe = info.get('returnOnEquity')
+        
+        # Định dạng lại dữ liệu nếu tồn tại, nếu không có thì trả về N/A
+        pe_str = f"{float(pe):.2f}" if pe is not None else "N/A"
+        pb_str = f"{float(pb):.2f}" if pb is not None else "N/A"
+        roe_str = f"{float(roe) * 100:.2f}" if roe is not None else "N/A"
+        
+        return {'pe': pe_str, 'pb': pb_str, 'roe': roe_str}
+        
+    except Exception as e:
+        # Nếu có bất kỳ lỗi gì (VD: mã cổ phiếu lạ không có trên Yahoo)
+        return {'pe': 'N/A', 'pb': 'N/A', 'roe': 'N/A'}
 def calculate_indicators(df):
     df['RSI'] = ta.momentum.RSIIndicator(close=df['Close'], window=14).rsi()
     df['MA20'] = ta.trend.SMAIndicator(close=df['Close'], window=20).sma_indicator()
