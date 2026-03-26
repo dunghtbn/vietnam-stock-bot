@@ -57,30 +57,31 @@ def load_data(symbol, timeframe):
         st.error(f"Lỗi API dữ liệu {symbol}: {e}")
         return None
 
-# --- THAY THẾ TOÀN BỘ HÀM load_vnindex_data BẰNG ĐOẠN SAU ---
-# --- TÌM VÀ SỬA LẠI HÀM NÀY ---
+# --- THAY THẾ TOÀN BỘ HÀM load_vnindex_data BẰNG ĐOẠN NÀY ---
 @st.cache_data(ttl=300)
 def load_vnindex_data(timeframe):
-    """Lấy dữ liệu VN-Index đồng bộ nguồn KBS"""
-    end_date = date.today().strftime("%Y-%m-%d")
-    
-    # SỬA DÒNG NÀY: Đổi 60 thành 730 để luôn đủ 20 phiên dù là Ngày hay Tuần
-    start_date = (date.today() - timedelta(days=730)).strftime("%Y-%m-%d") 
-    
+    """Sử dụng Yahoo Finance để lấy VN-Index (Hỗ trợ nến Tuần 100% không bị lỗi)"""
     try:
-        resolution = '1W' if timeframe == 'Tuần' else '1D'
-        stock = Vnstock().stock(symbol='VNINDEX', source='KBS')
-        df_index = stock.quote.history(start=start_date, end=end_date, interval=resolution)
+        # Lấy dư 730 ngày (2 năm) để luôn đủ 20 phiên Tuần
+        end_date = date.today() + timedelta(days=1)
+        start_date = date.today() - timedelta(days=730)
+        
+        # Yahoo Finance dùng '1wk' cho Tuần và '1d' cho Ngày
+        interval = '1wk' if timeframe == 'Tuần' else '1d'
+        
+        # ^VNINDEX là mã chuẩn của VN-Index trên Yahoo
+        ticker = yf.Ticker("^VNINDEX")
+        df_index = ticker.history(
+            start=start_date.strftime("%Y-%m-%d"), 
+            end=end_date.strftime("%Y-%m-%d"), 
+            interval=interval
+        )
         
         if df_index is not None and not df_index.empty:
-            df_index['time'] = pd.to_datetime(df_index['time'])
-            df_index.set_index('time', inplace=True)
+            # Bỏ múi giờ (timezone) của Yahoo để đồng bộ với dữ liệu chứng khoán VN
+            df_index.index = df_index.index.tz_localize(None)
+            return df_index
             
-            mapping = {'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'}
-            df_index.rename(columns=mapping, inplace=True)
-            
-            df_index['Close'] = pd.to_numeric(df_index['Close'], errors='coerce')
-            return df_index.dropna()
     except Exception as e:
         pass
         
