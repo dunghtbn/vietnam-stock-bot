@@ -79,47 +79,33 @@ def load_vnindex_data(timeframe):
 # --- THAY THẾ TOÀN BỘ HÀM load_fundamental_data CŨ BẰNG ĐOẠN SAU ---
 @st.cache_data(ttl=86400) 
 def load_fundamental_data(symbol):
-    """Sử dụng API trực tiếp từ SSI (Không cần đăng nhập) và dự phòng TCBS"""
+    """Sử dụng chiến thuật giả lập Googlebot để xuyên qua tường lửa Cloudflare chặn IP Mỹ"""
     
-    # Giả lập trình duyệt thật để không bị các trang web chặn (Anti-bot WAF)
+    # "Thẻ căn cước" giả lập Googlebot
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/plain, */*',
-        'Referer': 'https://iboard.ssi.com.vn/'
+        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
     }
     
-    # NGUỒN 1: Hút dữ liệu trực tiếp từ SSI (Đúng như ý tưởng của anh)
+    # NGUỒN 1: Tấn công trực diện API của VNDirect
     try:
-        url_ssi = f"https://fiin-fundamental.ssi.com.vn/FinancialAnalysis/GetFinancialRatio?language=vi&Ticker={symbol}"
-        res = requests.get(url_ssi, headers=headers, timeout=5)
-        
+        url_vnd = f"https://finfo-api.vndirect.com.vn/v4/ratios/latest?filter=itemCode:51007,51008,51003&where=code:{symbol}"
+        res = requests.get(url_vnd, headers=headers, timeout=5)
         if res.status_code == 200:
-            data = res.json()
-            items = data.get('items', [])
+            data = res.json().get('data', [])
             pe = pb = roe = None
+            for item in data:
+                if item['itemCode'] == '51007': pe = item['value']
+                elif item['itemCode'] == '51008': pb = item['value']
+                elif item['itemCode'] == '51003': roe = item['value']
             
-            # Lọc các chỉ số từ danh sách SSI trả về
-            for item in items:
-                code = item.get('code', '')
-                if code == 'PRICE_TO_EARNINGS': pe = item.get('value')
-                elif code == 'PRICE_TO_BOOK': pb = item.get('value')
-                elif code == 'RETURN_ON_EQUITY': roe = item.get('value')
-                
             if pe is not None and pb is not None:
                 roe_val = float(roe) if roe is not None else 0
-                # SSI thường trả ROE ở dạng thập phân (VD: 0.2032 -> 20.32%)
-                if -2.0 < roe_val < 2.0: 
-                    roe_val *= 100 
-                    
-                return {
-                    'pe': f"{float(pe):.2f}",
-                    'pb': f"{float(pb):.2f}",
-                    'roe': f"{roe_val:.2f}"
-                }
+                if -2.0 < roe_val < 2.0: roe_val *= 100 
+                return {'pe': f"{float(pe):.2f}", 'pb': f"{float(pb):.2f}", 'roe': f"{roe_val:.2f}"}
     except Exception:
-        pass # Nếu SSI lỗi mạng, âm thầm chuyển sang nguồn dự phòng
+        pass 
         
-    # NGUỒN 2: Dự phòng bằng API công khai của TCBS (Không cần login)
+    # NGUỒN 2: Lấy từ TCBS nếu VNDirect vẫn ngoan cố chặn
     try:
         url_tcbs = f"https://apipubaws.tcbs.com.vn/tcanalysis/v1/ticker/{symbol}/overview"
         res = requests.get(url_tcbs, headers=headers, timeout=5)
@@ -132,16 +118,28 @@ def load_fundamental_data(symbol):
             if pe is not None and pb is not None:
                 roe_val = float(roe) if roe is not None else 0
                 if -2.0 < roe_val < 2.0: roe_val *= 100
-                
-                return {
-                    'pe': f"{float(pe):.2f}",
-                    'pb': f"{float(pb):.2f}",
-                    'roe': f"{roe_val:.2f}"
-                }
+                return {'pe': f"{float(pe):.2f}", 'pb': f"{float(pb):.2f}", 'roe': f"{roe_val:.2f}"}
     except Exception:
         pass
 
-    # Nếu cả 2 nguồn lớn đều sập
+    # NGUỒN 3: Lấy từ Simplize (Một nền tảng mở hơn, ít chặn IP Mỹ)
+    try:
+        url_simp = f"https://api.simplize.vn/api/company/fi/ratios/{symbol}"
+        res = requests.get(url_simp, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
+        if res.status_code == 200:
+            data = res.json().get('data', {})
+            pe = data.get('pe')
+            pb = data.get('pb')
+            roe = data.get('roe')
+            
+            if pe is not None and pb is not None:
+                roe_val = float(roe) if roe is not None else 0
+                if -2.0 < roe_val < 2.0: roe_val *= 100
+                return {'pe': f"{float(pe):.2f}", 'pb': f"{float(pb):.2f}", 'roe': f"{roe_val:.2f}"}
+    except Exception:
+        pass
+
+    # Nếu cả 3 nguồn đều từ chối máy chủ Streamlit
     return {'pe': 'N/A', 'pb': 'N/A', 'roe': 'N/A'}
 def calculate_indicators(df):
     df['RSI'] = ta.momentum.RSIIndicator(close=df['Close'], window=14).rsi()
