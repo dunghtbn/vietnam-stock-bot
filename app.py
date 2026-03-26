@@ -112,12 +112,13 @@ def get_ai_analysis(api_key, symbol, current_price, rsi, ma20, status_ma20, bb_s
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-2.5-flash')
     
+    # ĐÃ SỬA .0f THÀNH .2f CHO GIÁ VÀ MA20 TẠI ĐÂY
     prompt = f"""Role: Bạn là Chuyên gia Phân tích Kỹ thuật Top 1 tại thị trường chứng khoán Việt Nam (VNI). Phong cách của bạn là: Ngắn gọn, súc tích, dựa trên số liệu, không đoán mò.
 
 Task: Phân tích mã {symbol} dựa trên dữ liệu kỹ thuật sau:
-- Giá hiện tại: {current_price:,.0f}
+- Giá hiện tại: {current_price:,.2f}
 - RSI(14): {rsi:.2f}
-- MA20: {ma20:,.0f} (Giá đang {status_ma20} đường MA20)
+- MA20: {ma20:,.2f} (Giá đang {status_ma20} đường MA20)
 - Bollinger Bands: {bb_status}
 - Volume trung bình 10 phiên: {avg_vol:,.0f} vs Volume hôm nay: {vol_today:,.0f}
 
@@ -144,11 +145,15 @@ def main():
     # Tiêu đề chính của App
     st.markdown(f"<h3 style='text-align: center; color: #1E88E5;'>Bot Phân tích chứng khoán Việt Nam bằng AI - {current_time}</h3>", unsafe_allow_html=True)
     st.markdown("---")
+    
     with st.sidebar:
         st.title("🎛️ Control Panel")
-        # Tự động lấy Key từ Secrets nếu có, nếu không thì để trống
-        default_key = st.secrets["GEMINI_API_KEY"] if "GEMINI_API_KEY" in st.secrets else ""
-        api_key = st.secrets["GEMINI_API_KEY"]     
+        # Lấy Key an toàn từ Secrets
+        try:
+            api_key = st.secrets["GEMINI_API_KEY"]
+        except KeyError:
+            api_key = ""
+            
         symbol = st.text_input("Mã Cổ Phiếu", value="DBC").upper()
         timeframe = st.selectbox("Khung thời gian", ["Ngày", "Tuần"])
         st.info("💡 Mẹo: Chọn 'Tuần' để xem xu hướng dài hạn.")
@@ -165,7 +170,8 @@ def main():
             pct_change = (change / prev_row['Close']) * 100
             
             m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Giá đóng cửa", f"{last_row['Close']:,.0f}", f"{pct_change:.2f}%")
+            # ĐÃ SỬA .0f THÀNH .2f TẠI ĐÂY
+            m1.metric("Giá đóng cửa", f"{last_row['Close']:,.2f}", f"{pct_change:.2f}%")
             m2.metric("Khối lượng", f"{last_row['Volume']:,.0f}")
             m3.metric("RSI (14)", f"{last_row['RSI']:.1f}")
             m4.metric("MA20 Trend", "Tăng" if last_row['Close'] > last_row['MA20'] else "Giảm")
@@ -182,13 +188,14 @@ def main():
             with col_right:
                 st.subheader("📋 Chỉ số Kỹ thuật")
                 
+                # ĐÃ SỬA .0f THÀNH .2f TẠI ĐÂY
                 tech_data = {
                     "Chỉ số": ["MA20", "MA50", "BB Upper", "BB Lower"],
                     "Giá trị": [
-                        f"{last_row['MA20']:,.0f}",
-                        f"{last_row['MA50']:,.0f}",
-                        f"{last_row['BB_Upper']:,.0f}",
-                        f"{last_row['BB_Lower']:,.0f}"
+                        f"{last_row['MA20']:,.2f}",
+                        f"{last_row['MA50']:,.2f}",
+                        f"{last_row['BB_Upper']:,.2f}",
+                        f"{last_row['BB_Lower']:,.2f}"
                     ]
                 }
                 st.table(pd.DataFrame(tech_data))
@@ -221,16 +228,14 @@ def main():
                         )
                         st.markdown(analysis)
                 else:
-                    st.warning("Nhập API Key để xem nhận định.")
-       # --- THÊM ĐOẠN NÀY VÀO CUỐI CÙNG CỦA KHỐI IF ---
-            st.markdown("---") # Kẻ thêm một đường ngang mỏng
+                    st.warning("Hệ thống chưa thiết lập API Key. Vui lòng kiểm tra lại cài đặt Secrets trên Streamlit.")
+            
+            # Phần Footer của tác giả
+            st.markdown("---")
             st.caption(f"🕒 *Dữ liệu được cập nhật lần cuối vào lúc: **{current_time}** (Múi giờ Việt Nam)*")
             st.markdown("<h5 style='text-align: center; color: #1E88E5;'>Thiết kế và Lập trình bởi: Hoàng Trung Dũng - Emai: dung@hdbn.vip</h5>", unsafe_allow_html=True)
         else:
             st.error(f"Không tìm thấy dữ liệu cho mã {symbol}")
+
 if __name__ == "__main__":
     main()
-
-
-
-
