@@ -31,7 +31,7 @@ st.markdown("""
 
 # --- 2. CÁC HÀM XỬ LÝ DỮ LIỆU ---
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def load_data(symbol, timeframe):
     end_date = date.today().strftime("%Y-%m-%d")
     start_date = (date.today() - timedelta(days=730)).strftime("%Y-%m-%d") 
@@ -250,8 +250,15 @@ def main():
             
         symbol = st.text_input("Mã Cổ Phiếu", value="DBC").upper()
         timeframe = st.selectbox("Khung thời gian", ["Ngày", "Tuần"])
+        
+        # --- THÊM ĐOẠN NÀY ĐỂ TẠO NÚT CẬP NHẬT REAL-TIME ---
+        if st.button("🔄 Làm mới dữ liệu (Real-time)", use_container_width=True):
+            st.cache_data.clear() # Xóa bộ nhớ tạm
+            st.rerun()            # Tải lại ngay lập tức
+        # ---------------------------------------------------
+        
         st.info("💡 Mẹo: Chọn 'Tuần' để xem xu hướng dài hạn.")
-        st.success("✨ V4.0: Cập nhật Tab Radar quét Siêu Cổ Phiếu")
+        st.success("✨ V5.0: Nâng cấp Real-time & Radar Đa Lớp")
 
     # --- KHỞI TẠO 2 TAB GIAO DIỆN ---
     tab1, tab2 = st.tabs(["📊 Phân Tích Chuyên Sâu", "🎯 Radar Quét Cổ Phiếu"])
@@ -287,7 +294,7 @@ def main():
                 else: rs_status = "TƯƠNG ĐƯƠNG ⚖️"
                 
                 m1, m2, m3, m4 = st.columns(4)
-                m1.metric("Giá đóng cửa", f"{last_row['Close']:,.2f}", f"{pct_change:.2f}%")
+                m1.metric("Giá hiện tại", f"{last_row['Close']:,.2f}", f"{pct_change:.2f}%")
                 m2.metric("Khối lượng", f"{last_row['Volume']:,.0f}")
                 m3.metric("RSI (14)", f"{last_row['RSI']:.1f}")
                 m4.metric("MA20 Trend", "Tăng" if last_row['Close'] > last_row['MA20'] else "Giảm")
