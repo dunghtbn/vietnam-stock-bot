@@ -7,6 +7,7 @@ from datetime import date, timedelta, datetime, timezone
 import google.generativeai as genai
 import requests
 import yfinance as yf
+from plotly.subplots import make_subplots
 
 # --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(
@@ -140,25 +141,55 @@ def calculate_indicators(df):
     df['BB_Lower'] = indicator_bb.bollinger_lband()
     return df
 
-# --- 3. HÀM VẼ BIỂU ĐỒ ---
+# --- 3. HÀM VẼ BIỂU ĐỒ NÂNG CẤP (CÓ KHỐI LƯỢNG) ---
 def plot_chart(df, symbol):
     plot_df = df.tail(150)
-    fig = go.Figure()
+    
+    # Tạo danh sách màu cho cột Khối lượng: Xanh nếu Giá Đóng >= Giá Mở, Đỏ nếu ngược lại
+    colors = ['#26a69a' if row['Close'] >= row['Open'] else '#ef5350' for index, row in plot_df.iterrows()]
 
+    # Chia bố cục biểu đồ thành 2 tầng (80% cho Giá, 20% cho Khối lượng)
+    fig = make_subplots(
+        rows=2, cols=1, 
+        shared_xaxes=True, 
+        vertical_spacing=0.03, 
+        row_heights=[0.8, 0.2]
+    )
+
+    # [TẦNG 1] Thêm Biểu đồ Nến Nhật
     fig.add_trace(go.Candlestick(
         x=plot_df.index,
         open=plot_df['Open'], high=plot_df['High'],
         low=plot_df['Low'], close=plot_df['Close'],
         name='Giá', increasing_line_color='#26a69a', decreasing_line_color='#ef5350'
-    ))
-    fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['MA20'], line=dict(color='yellow', width=1.5), name='MA20'))
-    fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['MA50'], line=dict(color='purple', width=1.5), name='MA50'))
+    ), row=1, col=1)
+    
+    # Thêm các đường MA vào Tầng 1
+    fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['MA20'], line=dict(color='yellow', width=1.5), name='MA20'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['MA50'], line=dict(color='purple', width=1.5), name='MA50'), row=1, col=1)
 
+    # [TẦNG 2] Thêm Biểu đồ Cột Khối lượng
+    fig.add_trace(go.Bar(
+        x=plot_df.index, 
+        y=plot_df['Volume'],
+        name='Khối lượng',
+        marker_color=colors,
+        showlegend=False
+    ), row=2, col=1)
+
+    # Căn chỉnh giao diện tổng thể
     fig.update_layout(
-        title=f"Biểu đồ kỹ thuật {symbol}", yaxis_title='Giá (VND)', xaxis_rangeslider_visible=False,
-        height=600, margin=dict(l=20, r=20, t=40, b=20),
+        title=f"Biểu đồ Kỹ thuật {symbol}",
+        yaxis_title='Giá (VND)',
+        yaxis2_title='Khối lượng',
+        height=700, # Tăng nhẹ chiều cao tổng thể để có không gian cho tầng khối lượng
+        margin=dict(l=20, r=20, t=40, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
+    
+    # Tắt thanh trượt (Rangeslider) mặc định của Plotly để biểu đồ gọn gàng
+    fig.update_xaxes(rangeslider_visible=False)
+
     return fig
 
 # --- 4. HÀM GỌI AI PHÂN TÍCH ---
