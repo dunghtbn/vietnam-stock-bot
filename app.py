@@ -141,7 +141,7 @@ def calculate_indicators(df):
     df['BB_Lower'] = indicator_bb.bollinger_lband()
     return df
 
-# --- 3. HÀM VẼ BIỂU ĐỒ NÂNG CẤP (CÓ KHỐI LƯỢNG) ---
+# --- 3. HÀM VẼ BIỂU ĐỒ NÂNG CẤP (CÓ KHỐI LƯỢNG & RSI) ---
 def plot_chart(df, symbol):
     # TÍNH TOÁN THÊM: Trung bình khối lượng 20 phiên
     df['Vol_MA20'] = df['Volume'].rolling(window=20).mean()
@@ -151,31 +151,27 @@ def plot_chart(df, symbol):
     # Lấy giá đóng cửa hiện tại (phiên gần nhất)
     current_price = df['Close'].iloc[-1]
     
-    # -------------------------------------------------------------------------
-    # BỔ SUNG: LOGIC ĐỔI MÀU CỘT KHỐI LƯỢNG KHI CÓ ĐỘT BIẾN
-    # -------------------------------------------------------------------------
+    # LOGIC ĐỔI MÀU CỘT KHỐI LƯỢNG KHI CÓ ĐỘT BIẾN
     colors = []
     for index, row in plot_df.iterrows():
         is_up = row['Close'] >= row['Open']
-        
-        # Kiểm tra xem có phải phiên bùng nổ thanh khoản không (> 1.5 lần trung bình)
         if pd.notna(row['Vol_MA20']) and row['Volume'] >= 1.5 * row['Vol_MA20']:
-            # Màu rực rỡ: Xanh lá mạ (Neon Green) cho phiên tăng, Đỏ tươi (Neon Red) cho phiên giảm
             colors.append('#00FF00' if is_up else '#FF0000') 
         else:
-            # Màu trầm bình thường (Teal / Muted Red)
             colors.append('#26a69a' if is_up else '#ef5350')
-    # -------------------------------------------------------------------------
 
-    # Chia bố cục biểu đồ thành 2 tầng (80% cho Giá, 20% cho Khối lượng)
+    # -------------------------------------------------------------------------
+    # BỔ SUNG: CHIA BIỂU ĐỒ THÀNH 3 TẦNG
+    # -------------------------------------------------------------------------
+    # Tầng 1 (Giá): 60%, Tầng 2 (Volume): 20%, Tầng 3 (RSI): 20%
     fig = make_subplots(
-        rows=2, cols=1, 
+        rows=3, cols=1, 
         shared_xaxes=True, 
         vertical_spacing=0.03, 
-        row_heights=[0.8, 0.2]
+        row_heights=[0.6, 0.2, 0.2] 
     )
 
-    # [TẦNG 1] Thêm Biểu đồ Nến Nhật
+    # [TẦNG 1] Thêm Biểu đồ Nến Nhật & Các chỉ báo giá
     fig.add_trace(go.Candlestick(
         x=plot_df.index,
         open=plot_df['Open'], high=plot_df['High'],
@@ -183,68 +179,59 @@ def plot_chart(df, symbol):
         name='Giá', increasing_line_color='#26a69a', decreasing_line_color='#ef5350'
     ), row=1, col=1)
     
-    # Thêm các đường MA vào Tầng 1
     fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['MA20'], line=dict(color='yellow', width=1.5), name='MA20'), row=1, col=1)
     fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['MA50'], line=dict(color='purple', width=1.5), name='MA50'), row=1, col=1)
     
-    # -------------------------------------------------------------------------
-    # BỔ SUNG: VẼ DẢI BOLLINGER BANDS VÀ TÔ MỜ Ở GIỮA (SHADED REGION)
-    # -------------------------------------------------------------------------
-    # 1. Vẽ đường BB Lower trước (không tô màu)
+    # Bollinger Bands
     fig.add_trace(go.Scatter(
-        x=plot_df.index, 
-        y=plot_df['BB_Lower'], 
-        line=dict(color='rgba(33, 150, 243, 0.3)', width=1), # Màu xanh dương nhạt, nét mảnh
-        name='BB Lower',
-        showlegend=False # Ẩn chú thích để gọn legend
+        x=plot_df.index, y=plot_df['BB_Lower'], 
+        line=dict(color='rgba(33, 150, 243, 0.3)', width=1), name='BB Lower', showlegend=False
     ), row=1, col=1)
 
-    # 2. Vẽ đường BB Upper sau và tô mờ xuống đường BB Lower
     fig.add_trace(go.Scatter(
-        x=plot_df.index, 
-        y=plot_df['BB_Upper'], 
-        fill='tonexty',                                      # Lệnh quan trọng: Tô màu lấp đầy xuống dải dưới
-        fillcolor='rgba(33, 150, 243, 0.08)',                # Màu nền dải BB (độ trong suốt 8% để không che lấp nến)
-        line=dict(color='rgba(33, 150, 243, 0.3)', width=1), 
-        name='Bollinger Bands'
+        x=plot_df.index, y=plot_df['BB_Upper'], fill='tonexty',                                      
+        fillcolor='rgba(33, 150, 243, 0.08)', line=dict(color='rgba(33, 150, 243, 0.3)', width=1), name='Bollinger Bands'
     ), row=1, col=1)
-    # -------------------------------------------------------------------------
 
-    # -------------------------------------------------------------------------
-    # BỔ SUNG: THÊM ĐƯỜNG KẺ NGANG ĐỨT NÉT THỂ HIỆN GIÁ THAM CHIẾU
-    # -------------------------------------------------------------------------
+    # Đường giá hiện tại
     fig.add_hline(
-        y=current_price, 
-        line_dash="dash",          
-        line_color="#ff9800",      
-        line_width=1.5,
-        annotation_text=f"Giá hiện tại: {current_price:,.0f}", # Đã sửa thành "Giá tham chiếu"
-        annotation_position="bottom left",                       
-        annotation_font=dict(color="#ff9800", size=12),
-        row=1, col=1
+        y=current_price, line_dash="dash", line_color="#ff9800", line_width=1.5,
+        annotation_text=f"Giá hiện tại: {current_price:,.0f}", annotation_position="bottom left",                       
+        annotation_font=dict(color="#ff9800", size=12), row=1, col=1
     )
-    # -------------------------------------------------------------------------
 
-    # [TẦNG 2] Thêm Biểu đồ Cột Khối lượng
+    # [TẦNG 2] Thêm Biểu đồ Cột Khối lượng & MA Volume
     fig.add_trace(go.Bar(
-        x=plot_df.index, 
-        y=plot_df['Volume'],
-        name='Khối lượng',
-        marker_color=colors, # Đã áp dụng dải màu mới có Neon
-        showlegend=False
+        x=plot_df.index, y=plot_df['Volume'], name='Khối lượng', marker_color=colors, showlegend=False
     ), row=2, col=1)
     
+    fig.add_trace(go.Scatter(
+        x=plot_df.index, y=plot_df['Vol_MA20'], mode='lines', line=dict(color='#ff9800', width=1.5), name='MA20 Khối lượng', showlegend=False
+    ), row=2, col=1)
+
     # -------------------------------------------------------------------------
-    # BỔ SUNG: THÊM ĐƯỜNG TRUNG BÌNH KHỐI LƯỢNG (MA20 VOLUME)
+    # [TẦNG 3] BỔ SUNG: BIỂU ĐỒ RSI (14)
     # -------------------------------------------------------------------------
+    # 1. Vẽ đường line RSI
     fig.add_trace(go.Scatter(
         x=plot_df.index,
-        y=plot_df['Vol_MA20'],
+        y=plot_df['RSI'],
         mode='lines',
-        line=dict(color='#ff9800', width=1.5), 
-        name='MA20 Khối lượng',
+        line=dict(color='#E1BEE7', width=1.5), # Màu tím nhạt cho RSI
+        name='RSI (14)',
         showlegend=False
-    ), row=2, col=1)
+    ), row=3, col=1)
+
+    # 2. Thêm vùng tô mờ màu tím từ mốc 30 đến 70 (Vùng bình thường của RSI)
+    fig.add_hrect(
+        y0=30, y1=70, 
+        fillcolor="purple", opacity=0.1, line_width=0, # Tô nền tím nhạt không viền
+        row=3, col=1
+    )
+
+    # 3. Thêm 2 đường kẻ đứt nét tại mốc 70 (Quá mua) và 30 (Quá bán)
+    fig.add_hline(y=70, line_dash="dot", line_color="red", line_width=1, row=3, col=1)
+    fig.add_hline(y=30, line_dash="dot", line_color="#26a69a", line_width=1, row=3, col=1)
     # -------------------------------------------------------------------------
 
     # Căn chỉnh giao diện tổng thể
@@ -252,12 +239,16 @@ def plot_chart(df, symbol):
         title=f"Biểu đồ Kỹ thuật {symbol}",
         yaxis_title='Giá (VND)',
         yaxis2_title='Khối lượng',
-        height=700, 
+        yaxis3_title='RSI (14)', # Bổ sung tên trục Y cho tầng 3
+        height=850,              # Tăng nhẹ chiều cao tổng (từ 700 lên 850) để không bị lùn nến
         margin=dict(l=20, r=20, t=40, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
     
-    # Tắt thanh trượt (Rangeslider) mặc định của Plotly để biểu đồ gọn gàng
+    # Ép trục Y của RSI cố định từ 0 đến 100
+    fig.update_yaxes(range=[0, 100], row=3, col=1)
+    
+    # Tắt thanh trượt (Rangeslider)
     fig.update_xaxes(rangeslider_visible=False)
 
     return fig
