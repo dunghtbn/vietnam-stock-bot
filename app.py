@@ -147,6 +147,22 @@ def plot_chart(df, symbol):
     df['Vol_MA20'] = df['Volume'].rolling(window=20).mean()
     
     plot_df = df.tail(150)
+    # -------------------------------------------------------------------------
+        # BỔ SUNG: LOGIC ĐỔI MÀU CỘT KHỐI LƯỢNG KHI CÓ ĐỘT BIẾN
+        # -------------------------------------------------------------------------
+        colors = []
+        for index, row in plot_df.iterrows():
+            is_up = row['Close'] >= row['Open']
+            
+            # Kiểm tra xem có phải phiên bùng nổ thanh khoản không (> 1.5 lần trung bình)
+            # Dùng pd.notna để tránh lỗi toán học nếu MA20 chưa có dữ liệu ở các phiên đầu
+            if pd.notna(row['Vol_MA20']) and row['Volume'] >= 1.5 * row['Vol_MA20']:
+                # Màu rực rỡ: Xanh lá mạ (Neon Green) cho phiên tăng, Đỏ tươi (Neon Red) cho phiên giảm
+                colors.append('#00FF00' if is_up else '#FF0000') 
+            else:
+                # Màu trầm bình thường (Teal / Muted Red)
+                colors.append('#26a69a' if is_up else '#ef5350')
+        # -------------------------------------------------------------------------
     
     # Lấy giá đóng cửa hiện tại (phiên gần nhất)
     current_price = df['Close'].iloc[-1]
