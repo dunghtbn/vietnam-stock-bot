@@ -172,16 +172,16 @@ def plot_chart(df, symbol):
     fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['MA50'], line=dict(color='purple', width=1.5), name='MA50'), row=1, col=1)
 
     # -------------------------------------------------------------------------
-    # BỔ SUNG: THÊM ĐƯỜNG KẺ NGANG ĐỨT NÉT THỂ HIỆN GIÁ HIỆN TẠI
+    # BỔ SUNG: THÊM ĐƯỜNG KẺ NGANG ĐỨT NÉT THỂ HIỆN GIÁ THAM CHIẾU
     # -------------------------------------------------------------------------
     fig.add_hline(
         y=current_price, 
-        line_dash="dash",          # Kiểu nét đứt (có thể đổi thành "dot" nếu muốn nét chấm nhỏ hơn)
-        line_color="#ff9800",         # Màu xanh lơ cho nổi bật trên nền tối/sáng, bạn có thể đổi thành "white" hoặc "red"
+        line_dash="dash",          
+        line_color="#ff9800",      # Chỉnh lại màu cam/vàng cho giống ảnh của bạn
         line_width=1.5,
-        annotation_text=f"Giá HT: {current_price:,.0f}", # Gắn luôn nhãn text để dễ nhìn
-        annotation_position="bottom right",
-        annotation_font=dict(color="#ff9800", size=13),
+        annotation_text=f"Giá tham chiếu: {current_price:,.0f}", # Đổi tên nhãn
+        annotation_position="bottom left",                       # Chuyển nhãn sang lề trái để không đè nến
+        annotation_font=dict(color="#ff9800", size=12),
         row=1, col=1
     )
     # -------------------------------------------------------------------------
