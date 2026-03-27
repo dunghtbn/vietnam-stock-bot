@@ -139,19 +139,23 @@ def calculate_indicators(df):
     indicator_bb = ta.volatility.BollingerBands(close=df['Close'], window=20, window_dev=2)
     df['BB_Upper'] = indicator_bb.bollinger_hband()
     df['BB_Lower'] = indicator_bb.bollinger_lband()
+    # -------------------------------------------------------------------------
+    # BỔ SUNG: TÍNH TOÁN MACD
+    # -------------------------------------------------------------------------
+    macd = ta.trend.MACD(close=df['Close'])
+    df['MACD'] = macd.macd()
+    df['MACD_Signal'] = macd.macd_signal()
+    df['MACD_Hist'] = macd.macd_diff()
+    # -------------------------------------------------------------------------
     return df
 
-# --- 3. HÀM VẼ BIỂU ĐỒ NÂNG CẤP (CÓ KHỐI LƯỢNG & RSI) ---
-def plot_chart(df, symbol):
-    # TÍNH TOÁN THÊM: Trung bình khối lượng 20 phiên
+# --- 3. HÀM VẼ BIỂU ĐỒ NÂNG CẤP (CÓ KHỐI LƯỢNG & TẦNG 3 TUỲ BIẾN) ---
+# SỬA LẠI: Thêm tham số indicator_choice
+def plot_chart(df, symbol, indicator_choice="RSI"): 
     df['Vol_MA20'] = df['Volume'].rolling(window=20).mean()
-    
     plot_df = df.tail(150)
-        
-    # Lấy giá đóng cửa hiện tại (phiên gần nhất)
     current_price = df['Close'].iloc[-1]
     
-    # LOGIC ĐỔI MÀU CỘT KHỐI LƯỢNG KHI CÓ ĐỘT BIẾN
     colors = []
     for index, row in plot_df.iterrows():
         is_up = row['Close'] >= row['Open']
@@ -160,95 +164,65 @@ def plot_chart(df, symbol):
         else:
             colors.append('#26a69a' if is_up else '#ef5350')
 
-    # -------------------------------------------------------------------------
-    # BỔ SUNG: CHIA BIỂU ĐỒ THÀNH 3 TẦNG
-    # -------------------------------------------------------------------------
-    # Tầng 1 (Giá): 60%, Tầng 2 (Volume): 20%, Tầng 3 (RSI): 20%
     fig = make_subplots(
         rows=3, cols=1, 
-        shared_xaxes=True, 
-        vertical_spacing=0.03, 
-        row_heights=[0.6, 0.2, 0.2] 
+        shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.6, 0.2, 0.2] 
     )
 
-    # [TẦNG 1] Thêm Biểu đồ Nến Nhật & Các chỉ báo giá
+    # [TẦNG 1] Nến Nhật, MA, Bollinger Bands, Đường kẻ ngang
     fig.add_trace(go.Candlestick(
-        x=plot_df.index,
-        open=plot_df['Open'], high=plot_df['High'],
-        low=plot_df['Low'], close=plot_df['Close'],
-        name='Giá', increasing_line_color='#26a69a', decreasing_line_color='#ef5350'
+        x=plot_df.index, open=plot_df['Open'], high=plot_df['High'],
+        low=plot_df['Low'], close=plot_df['Close'], name='Giá', increasing_line_color='#26a69a', decreasing_line_color='#ef5350'
     ), row=1, col=1)
-    
     fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['MA20'], line=dict(color='yellow', width=1.5), name='MA20'), row=1, col=1)
     fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['MA50'], line=dict(color='purple', width=1.5), name='MA50'), row=1, col=1)
-    
-    # Bollinger Bands
-    fig.add_trace(go.Scatter(
-        x=plot_df.index, y=plot_df['BB_Lower'], 
-        line=dict(color='rgba(33, 150, 243, 0.3)', width=1), name='BB Lower', showlegend=False
-    ), row=1, col=1)
-
-    fig.add_trace(go.Scatter(
-        x=plot_df.index, y=plot_df['BB_Upper'], fill='tonexty',                                      
-        fillcolor='rgba(33, 150, 243, 0.08)', line=dict(color='rgba(33, 150, 243, 0.3)', width=1), name='Bollinger Bands'
-    ), row=1, col=1)
-
-    # Đường giá hiện tại
+    fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['BB_Lower'], line=dict(color='rgba(33, 150, 243, 0.3)', width=1), name='BB Lower', showlegend=False), row=1, col=1)
+    fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['BB_Upper'], fill='tonexty', fillcolor='rgba(33, 150, 243, 0.08)', line=dict(color='rgba(33, 150, 243, 0.3)', width=1), name='Bollinger Bands'), row=1, col=1)
     fig.add_hline(
         y=current_price, line_dash="dash", line_color="#ff9800", line_width=1.5,
         annotation_text=f"Giá hiện tại: {current_price:,.0f}", annotation_position="bottom left",                       
         annotation_font=dict(color="#ff9800", size=12), row=1, col=1
     )
 
-    # [TẦNG 2] Thêm Biểu đồ Cột Khối lượng & MA Volume
-    fig.add_trace(go.Bar(
-        x=plot_df.index, y=plot_df['Volume'], name='Khối lượng', marker_color=colors, showlegend=False
-    ), row=2, col=1)
-    
-    fig.add_trace(go.Scatter(
-        x=plot_df.index, y=plot_df['Vol_MA20'], mode='lines', line=dict(color='#ff9800', width=1.5), name='MA20 Khối lượng', showlegend=False
-    ), row=2, col=1)
+    # [TẦNG 2] Khối lượng
+    fig.add_trace(go.Bar(x=plot_df.index, y=plot_df['Volume'], name='Khối lượng', marker_color=colors, showlegend=False), row=2, col=1)
+    fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Vol_MA20'], mode='lines', line=dict(color='#ff9800', width=1.5), name='MA20 Khối lượng', showlegend=False), row=2, col=1)
 
     # -------------------------------------------------------------------------
-    # [TẦNG 3] BỔ SUNG: BIỂU ĐỒ RSI (14)
+    # [TẦNG 3] BỔ SUNG: LOGIC VẼ RSI HOẶC MACD
     # -------------------------------------------------------------------------
-    # 1. Vẽ đường line RSI
-    fig.add_trace(go.Scatter(
-        x=plot_df.index,
-        y=plot_df['RSI'],
-        mode='lines',
-        line=dict(color='#E1BEE7', width=1.5), # Màu tím nhạt cho RSI
-        name='RSI (14)',
-        showlegend=False
-    ), row=3, col=1)
-
-    # 2. Thêm vùng tô mờ màu tím từ mốc 30 đến 70 (Vùng bình thường của RSI)
-    fig.add_hrect(
-        y0=30, y1=70, 
-        fillcolor="purple", opacity=0.1, line_width=0, # Tô nền tím nhạt không viền
-        row=3, col=1
-    )
-
-    # 3. Thêm 2 đường kẻ đứt nét tại mốc 70 (Quá mua) và 30 (Quá bán)
-    fig.add_hline(y=70, line_dash="dot", line_color="red", line_width=1, row=3, col=1)
-    fig.add_hline(y=30, line_dash="dot", line_color="#26a69a", line_width=1, row=3, col=1)
+    if indicator_choice == "RSI":
+        fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['RSI'], mode='lines', line=dict(color='#E1BEE7', width=1.5), name='RSI', showlegend=False), row=3, col=1)
+        fig.add_hrect(y0=30, y1=70, fillcolor="purple", opacity=0.1, line_width=0, row=3, col=1)
+        fig.add_hline(y=70, line_dash="dot", line_color="red", line_width=1, row=3, col=1)
+        fig.add_hline(y=30, line_dash="dot", line_color="#26a69a", line_width=1, row=3, col=1)
+        fig.update_yaxes(range=[0, 100], row=3, col=1) # Khóa range cho RSI
+        yaxis3_title = 'RSI (14)'
+    else:
+        # Tô màu MACD Histogram: Xanh nếu dương, Đỏ nếu âm
+        macd_colors = ['#26a69a' if val >= 0 else '#ef5350' for val in plot_df['MACD_Hist']]
+        
+        # Vẽ Histogram (Cột)
+        fig.add_trace(go.Bar(x=plot_df.index, y=plot_df['MACD_Hist'], marker_color=macd_colors, name='MACD Hist', showlegend=False), row=3, col=1)
+        # Vẽ đường MACD (Xanh)
+        fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['MACD'], mode='lines', line=dict(color='#2962FF', width=1.5), name='MACD', showlegend=False), row=3, col=1)
+        # Vẽ đường Signal (Cam)
+        fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['MACD_Signal'], mode='lines', line=dict(color='#FF6D00', width=1.5), name='Signal', showlegend=False), row=3, col=1)
+        
+        # Bỏ khóa range cho MACD vì MACD dao động tự do quanh trục 0
+        fig.update_yaxes(autorange=True, row=3, col=1) 
+        yaxis3_title = 'MACD'
     # -------------------------------------------------------------------------
 
-    # Căn chỉnh giao diện tổng thể
     fig.update_layout(
         title=f"Biểu đồ Kỹ thuật {symbol}",
         yaxis_title='Giá (VND)',
         yaxis2_title='Khối lượng',
-        yaxis3_title='RSI (14)', # Bổ sung tên trục Y cho tầng 3
-        height=850,              # Tăng nhẹ chiều cao tổng (từ 700 lên 850) để không bị lùn nến
+        yaxis3_title=yaxis3_title, # Cập nhật tên trục linh hoạt
+        height=850,              
         margin=dict(l=20, r=20, t=40, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
-    
-    # Ép trục Y của RSI cố định từ 0 đến 100
-    fig.update_yaxes(range=[0, 100], row=3, col=1)
-    
-    # Tắt thanh trượt (Rangeslider)
     fig.update_xaxes(rangeslider_visible=False)
 
     return fig
@@ -341,6 +315,11 @@ def main():
             
         symbol = st.text_input("Mã Cổ Phiếu", value="DBC").upper()
         timeframe = st.selectbox("Khung thời gian", ["Ngày", "Tuần"])
+        # -------------------------------------------------------------------------
+        # BỔ SUNG: NÚT CHỌN CHỈ BÁO CHO TẦNG 3
+        # -------------------------------------------------------------------------
+        indicator_choice = st.radio("Tầng 3: Chọn chỉ báo dao động", ["RSI", "MACD"], horizontal=True)
+        # -------------------------------------------------------------------------
         
         # --- THÊM ĐOẠN NÀY ĐỂ TẠO NÚT CẬP NHẬT REAL-TIME ---
         if st.button("🔄 Làm mới dữ liệu (Real-time)", use_container_width=True):
@@ -398,7 +377,8 @@ def main():
                     st.info(f"📈 **Đo lường RS (20 phiên):** Mã **{symbol}** thay đổi **{stock_perf:.2f}%** | VN-Index thay đổi **{vnindex_perf:.2f}%** ➔ Cổ phiếu đang **{rs_status}**")
                     
                     st.subheader(f"📊 Biểu đồ {symbol} ({timeframe})")
-                    fig = plot_chart(df, symbol)
+                    # SỬA LẠI DÒNG NÀY: Truyền thêm indicator_choice vào hàm
+                    fig = plot_chart(df, symbol, indicator_choice) 
                     st.plotly_chart(fig, use_container_width=True)
 
                 with col_right:
