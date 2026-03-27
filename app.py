@@ -446,7 +446,10 @@ def main():
                             report_content = f"BÁO CÁO PHÂN TÍCH MÃ {symbol}\n"
                             report_content += f"Ngày phân tích: {current_time}\n"
                             report_content += "-"*40 + "\n"
-                            report_content += f"[Kỹ thuật] Giá: {last_row['Close']:,.2f} | RSI: {last_row['RSI']:.2f} | Khối lượng: {vol_today:,.0f}\n"
+                            if indicator_choice == "RSI":
+                                report_content += f"[Kỹ thuật] Giá: {last_row['Close']:,.2f} | RSI: {last_row['RSI']:.2f} | Khối lượng: {vol_today:,.0f}\n"
+                            else:
+                                report_content += f"[Kỹ thuật] Giá: {last_row['Close']:,.2f} | MACD: {last_row['MACD']:.3f} | Khối lượng: {vol_today:,.0f}\n"
                             report_content += f"[Cơ bản] Vốn hóa: {fa_data['market_cap']} | P/E: {fa_data['pe']} | P/B: {fa_data['pb']} | ROE: {fa_data['roe']}%\n"
                             report_content += f"[Độ An Toàn] Tỷ suất cổ tức: {fa_data['div_yield']} | Nợ/Vốn CSH: {fa_data['debt_to_equity']}\n"
                             report_content += f"[Sức mạnh Giá] {symbol} thay đổi {stock_perf:.2f}% vs VN-Index {vnindex_perf:.2f}%\n"
