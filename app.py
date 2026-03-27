@@ -416,7 +416,17 @@ def main():
 
     with tab3:
         st.subheader("⚖️ Bảng Xếp Hạng Định Giá Cổ Phiếu (Fair Value)")
-        val_tickers_input = st.text_input("Nhập danh sách mã để chấm điểm định giá:", "HPG, SSI, VND, DBC, VNM, TCB, MBB, FPT, MWG, REE, VCB", key="val_input")
+        
+        # -------------------------------------------------------------------------
+        # BỔ SUNG: DANH SÁCH VN100 LÀM MẶC ĐỊNH
+        # -------------------------------------------------------------------------
+        vn100_tickers = "ACB, BCM, BID, BVH, CTG, FPT, GAS, GVR, HDB, HPG, MBB, MSN, MWG, PLX, POW, SAB, SHB, SSB, SSI, STB, TCB, TPB, VCB, VHM, VIB, VIC, VJC, VNM, VPB, VRE, AAA, BCG, BWE, CII, CTD, DBC, DGC, DGW, DIG, DPM, DXG, EIB, EVF, FCN, FRT, GEX, HAG, HAH, HCM, HDC, HDG, HHV, HSG, IDC, IJC, KBC, KDC, KOS, LCG, LPB, MSB, NKG, NLG, NVL, OCB, PAN, PC1, PDR, PHR, PNJ, PTB, PVD, PVS, REE, SAM, SBT, SCR, SHS, SZC, TCH, VCG, VCI, VGC, VHC, VIX, VND"
+        
+        st.info("💡 Hệ thống đang được thiết lập mặc định quét toàn bộ rổ **VN100** (Các doanh nghiệp đầu ngành và thanh khoản cao nhất thị trường).")
+        
+        # Sử dụng text_area để chứa được chuỗi dài, người dùng vẫn có thể xóa bớt hoặc thêm mã khác
+        val_tickers_input = st.text_area("Danh sách mã chờ quét:", vn100_tickers, key="val_input", height=100)
+        # -------------------------------------------------------------------------
         
         if st.button("🔍 Quét Định Giá & Tiềm Năng", use_container_width=True):
             val_tickers = [x.strip().upper() for x in val_tickers_input.split(",") if x.strip()]
