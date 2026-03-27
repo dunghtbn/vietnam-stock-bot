@@ -202,6 +202,35 @@ Yêu cầu output format:
     except Exception as e:
         return f"Lỗi AI: {e}"
 
+# --- 4.5. HÀM AI SO SÁNH & CHỌN LỌC SIÊU CỔ PHIẾU ---
+def get_ai_best_pick(api_key, results_list):
+    if not api_key: return "⚠️ Vui lòng nhập API Key để dùng tính năng này."
+    
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel('gemini-2.5-flash')
+    
+    # Gom thông tin các mã cổ phiếu đạt chuẩn thành một bản báo cáo cho AI
+    stocks_info = ""
+    for r in results_list:
+        stocks_info += f"- Mã {r['Mã CP']}: Giá {r['Giá Đóng Cửa']}, RSI {r['RSI']}, MA20 {r['MA20']}, Khối lượng {r['Khối Lượng']}, ROE {r['ROE (%)']}%, P/E {r['P/E']}\n"
+        
+    prompt = f"""Role: Bạn là Giám đốc Đầu tư (CIO) quản lý quỹ phòng hộ. 
+    Task: Radar của tôi vừa lọc ra được danh sách các cổ phiếu đã vượt qua cả điều kiện kỹ thuật (dòng tiền) và cơ bản (lợi nhuận) sau:
+    {stocks_info}
+    
+    Dựa trên nền tảng kỹ thuật (RSI, Giá so với MA20) kết hợp với định giá & sinh lời (ROE, P/E), hãy chọn ra ĐÚNG 1 MÃ an toàn và có khả năng bùng nổ cao nhất để giải ngân ngay.
+    
+    Yêu cầu output format:
+    🏆 **SIÊU CỔ PHIẾU LỰA CHỌN:** [Tên mã]
+    💡 **LÝ DO CHIẾN THẮNG:** [Tại sao mã này vượt trội hơn các mã khác về cả FA lẫn TA]
+    🎯 **KẾ HOẠCH HÀNH ĐỘNG:** [Khuyến nghị Vùng giá mua, Mục tiêu chốt lời, Điểm cắt lỗ tuyệt đối]
+    """
+    try:
+        with st.spinner('🤖 Giám đốc AI đang chấm điểm định giá và dòng tiền từng mã...'):
+            response = model.generate_content(prompt)
+            return response.text
+    except Exception as e:
+        return f"Lỗi AI: {e}"
 # --- 5. GIAO DIỆN CHÍNH (MAIN) ---
 def main():
     vn_tz = timezone(timedelta(hours=7))
@@ -350,76 +379,118 @@ def main():
 
     # --- GIAO DIỆN TAB 2 ---
     with tab2:
-        st.subheader("📡 Radar Quét Tín Hiệu Kỹ Thuật & Dòng Tiền")
-        st.markdown("Hệ thống sẽ tự động phân tích hàng loạt mã cổ phiếu để tìm ra các cơ hội đạt chuẩn.")
+        st.subheader("📡 Radar Quét Đa Chiều (TA + FA)")
+        st.markdown("Bộ lọc hội tụ: Tìm kiếm các mã đang có dòng tiền vào (TA) và nền tảng kinh doanh sinh lời tốt (FA).")
         
-        default_tickers = "SSI, VND, HPG, HSG, VCB, MBB, MSB, TCB, FPT, MWG, DBC, VNM, GEX, DIG, DXG, PVD"
+        default_tickers = "SSI, VND, HPG, HSG, NVL, SHS, MSB, VIX, CII, EVF, DBC, VNM, DXG, DIG, PDR, PVD"
         tickers_input = st.text_input("Nhập danh sách mã cần quét (cách nhau bằng dấu phẩy):", default_tickers)
         
-        col_f1, col_f2 = st.columns(2)
+        # SỬ DỤNG SESSION_STATE: Để lưu lại kết quả quét, tránh bị mất bảng khi bấm nút AI
+        if 'radar_results' not in st.session_state: st.session_state.radar_results = []
+        if 'has_run_radar' not in st.session_state: st.session_state.has_run_radar = False
+        if 'radar_ai_pick' not in st.session_state: st.session_state.radar_ai_pick = ""
+        
+        # BỘ LỌC 3 CỘT
+        col_f1, col_f2, col_f3 = st.columns(3)
         with col_f1:
-            filter_rsi = st.selectbox("🎯 Điều kiện RSI:", [
+            filter_rsi = st.selectbox("🎯 Điều kiện RSI (Kỹ thuật):", [
                 "Không lọc", 
                 "RSI < 30 (Vùng Quá bán - Bắt đáy)", 
                 "RSI > 50 (Xu hướng Tích cực)", 
                 "RSI > 70 (Vùng Quá mua)"
             ])
         with col_f2:
-            filter_ma20 = st.selectbox("📈 Điều kiện Xu hướng (MA20):", [
+            filter_ma20 = st.selectbox("📈 Điều kiện MA20 (Xu hướng):", [
                 "Không lọc", 
                 "Giá vừa cắt lên MA20 (Điểm mua sớm)", 
                 "Giá nằm trên MA20 (Đang Uptrend)"
             ])
+        with col_f3:
+            filter_roe = st.selectbox("🏢 Điều kiện ROE (Cơ bản):", [
+                "Không lọc", 
+                "ROE > 10% (Hoạt động Tốt)", 
+                "ROE > 15% (Sinh lời Rất Tốt)",
+                "ROE > 20% (Doanh nghiệp Xuất sắc)"
+            ])
 
-        if st.button("🚀 Kích Hoạt Radar", use_container_width=True):
-            tickers = [x.strip().upper() for x in tickers_input.split(",") if x.strip()]
-            results = []
+        if st.button("🚀 Kích Hoạt Radar Lọc Cổ Phiếu", use_container_width=True):
+            # Xóa dữ liệu cũ mỗi lần quét mới
+            st.session_state.radar_results = []
+            st.session_state.radar_ai_pick = ""
+            st.session_state.has_run_radar = True
             
-            progress_text = "Radar đang quét dữ liệu thị trường. Vui lòng đợi..."
-            my_bar = st.progress(0, text=progress_text)
+            tickers = [x.strip().upper() for x in tickers_input.split(",") if x.strip()]
+            temp_results = []
+            
+            my_bar = st.progress(0, text="Radar đang quét dữ liệu thị trường...")
             
             for i, t in enumerate(tickers):
-                my_bar.progress((i + 1) / len(tickers), text=f"Đang phân tích tín hiệu mã {t}...")
+                my_bar.progress((i + 1) / len(tickers), text=f"Đang phân tích tín hiệu & định giá mã {t}...")
                 
-                # ĐÃ SỬA: Gọi đúng tên hàm load_data thay vì load_stock_data
                 df_scan = load_data(t, "Ngày") 
-                
                 if df_scan is not None and len(df_scan) > 2:
-                    # Chạy qua hàm tính toán RSI, MA20 trước khi đánh giá
                     df_scan = calculate_indicators(df_scan)
+                    fa_data = load_fundamental_data(t) # Kéo tự động P/E, ROE
                     
                     last_row_scan = df_scan.iloc[-1]
                     prev_row_scan = df_scan.iloc[-2]
                     
                     passed = True
                     
+                    # 1. Lọc Kỹ thuật (TA)
                     if filter_rsi == "RSI < 30 (Vùng Quá bán - Bắt đáy)" and last_row_scan['RSI'] >= 30: passed = False
                     elif filter_rsi == "RSI > 50 (Xu hướng Tích cực)" and last_row_scan['RSI'] <= 50: passed = False
                     elif filter_rsi == "RSI > 70 (Vùng Quá mua)" and last_row_scan['RSI'] <= 70: passed = False
                     
                     if filter_ma20 == "Giá vừa cắt lên MA20 (Điểm mua sớm)":
-                        if not (prev_row_scan['Close'] < prev_row_scan['MA20'] and last_row_scan['Close'] > last_row_scan['MA20']):
-                            passed = False
+                        if not (prev_row_scan['Close'] < prev_row_scan['MA20'] and last_row_scan['Close'] > last_row_scan['MA20']): passed = False
                     elif filter_ma20 == "Giá nằm trên MA20 (Đang Uptrend)":
-                        if last_row_scan['Close'] < last_row_scan['MA20']:
-                            passed = False
+                        if last_row_scan['Close'] < last_row_scan['MA20']: passed = False
+                            
+                    # 2. Lọc Cơ bản (FA - ROE)
+                    roe_str = fa_data['roe']
+                    roe_val = 0.0
+                    if roe_str != "N/A":
+                        try: roe_val = float(roe_str)
+                        except: pass
+                    else:
+                        if filter_roe != "Không lọc": passed = False # Bỏ qua mã thiếu dữ liệu ROE
+                        
+                    if filter_roe == "ROE > 10% (Hoạt động Tốt)" and roe_val <= 10: passed = False
+                    elif filter_roe == "ROE > 15% (Sinh lời Rất Tốt)" and roe_val <= 15: passed = False
+                    elif filter_roe == "ROE > 20% (Doanh nghiệp Xuất sắc)" and roe_val <= 20: passed = False
                     
                     if passed:
-                        results.append({
+                        temp_results.append({
                             "Mã CP": t,
                             "Giá Đóng Cửa": f"{last_row_scan['Close']:,.2f}",
                             "RSI": round(last_row_scan['RSI'], 2),
                             "MA20": f"{last_row_scan['MA20']:,.2f}",
-                            "Khối Lượng": f"{last_row_scan['Volume']:,.0f}"
+                            "Khối Lượng": f"{last_row_scan['Volume']:,.0f}",
+                            "ROE (%)": roe_str,
+                            "P/E": fa_data['pe']
                         })
                         
             my_bar.empty() 
-            
-            if results:
-                st.success(f"🎉 Rà soát hoàn tất! Có {len(results)} mã đang đạt chuẩn kỹ thuật của anh.")
-                st.dataframe(pd.DataFrame(results), use_container_width=True, hide_index=True)
-            else:
-                st.warning("Khung thị trường hiện tại không có mã nào trong danh sách thỏa mãn bộ lọc này.")
+            st.session_state.radar_results = temp_results
 
+        # 3. HIỂN THỊ KẾT QUẢ VÀ NÚT CHỌN LỌC AI
+        if st.session_state.has_run_radar:
+            if st.session_state.radar_results:
+                st.success(f"🎉 Rà soát hoàn tất! Có {len(st.session_state.radar_results)} mã lọt qua bộ lọc khắt khe của anh.")
+                st.dataframe(pd.DataFrame(st.session_state.radar_results), use_container_width=True, hide_index=True)
+                
+                # --- NÚT HIỆN HỮU KHI CÓ NHIỀU HƠN 1 MÃ ---
+                if len(st.session_state.radar_results) > 1:
+                    st.markdown("---")
+                    st.subheader("🤖 Giám Đốc Đầu Tư AI: Chọn Lọc Tinh Hoa")
+                    if st.button("🏆 Nhờ AI chấm điểm & Chọn ra 1 mã an toàn nhất", use_container_width=True):
+                        pick_result = get_ai_best_pick(api_key, st.session_state.radar_results)
+                        st.session_state.radar_ai_pick = pick_result
+                        
+                if st.session_state.radar_ai_pick:
+                    st.info(st.session_state.radar_ai_pick)
+            else:
+                st.warning("Khung thị trường hiện tại không có mã nào thỏa mãn toàn bộ các điều kiện này.")
 if __name__ == "__main__":
     main()
