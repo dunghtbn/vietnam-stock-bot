@@ -402,51 +402,44 @@ def main():
                     
                     st.subheader("🏢 Chỉ số Cơ bản & Sức khỏe")
                     
-                    # -------------------------------------------------------------------------
-                    # BỔ SUNG: HỆ THỐNG CẢNH BÁO RỦI RO NỢ (DEBT TO EQUITY)
-                    # -------------------------------------------------------------------------
+                    # 1. HỆ THỐNG CẢNH BÁO RỦI RO NỢ (DEBT TO EQUITY)
                     debt_str = fa_data['debt_to_equity']
                     debt_display = debt_str
-                    
                     if debt_str != "N/A":
                         try:
-                            # Tách bỏ dấu '%' để lấy giá trị số thực
                             debt_val = float(debt_str.replace('%', '').strip())
-                            
-                            # Phân loại rủi ro
-                            if debt_val < 100:
-                                debt_display = f"{debt_str} 🟢 (An toàn)"
-                            elif debt_val <= 200:
-                                debt_display = f"{debt_str} 🟡 (Lưu ý)"
-                            else:
-                                debt_display = f"{debt_str} 🔴 (Rủi ro cao)"
-                        except:
-                            pass # Bỏ qua nếu lỗi chuyển đổi
-                    # -------------------------------------------------------------------------
+                            if debt_val < 100: debt_display = f"{debt_str} 🟢 (An toàn)"
+                            elif debt_val <= 200: debt_display = f"{debt_str} 🟡 (Lưu ý)"
+                            else: debt_display = f"{debt_str} 🔴 (Rủi ro cao)"
+                        except: pass
 
-                    # -------------------------------------------------------------------------
-                    # BỔ SUNG: HỆ THỐNG CHẤM ĐIỂM ĐỊNH GIÁ P/E
-                    # -------------------------------------------------------------------------
+                    # 2. HỆ THỐNG CHẤM ĐIỂM ĐỊNH GIÁ P/E
                     pe_str = fa_data['pe']
                     pe_display = pe_str
-                    
                     if pe_str != "N/A":
                         try:
                             pe_val = float(pe_str)
-                            if pe_val < 10:
-                                pe_display = f"{pe_str} 🟢 (Rẻ)"
-                            elif pe_val <= 20:
-                                pe_display = f"{pe_str} 🟡 (Hợp lý)"
-                            else:
-                                pe_display = f"{pe_str} 🔴 (Đắt)"
-                        except:
-                            pass
-                    # -------------------------------------------------------------------------
+                            if pe_val < 10: pe_display = f"{pe_str} 🟢 (Rẻ)"
+                            elif pe_val <= 20: pe_display = f"{pe_str} 🟡 (Hợp lý)"
+                            else: pe_display = f"{pe_str} 🔴 (Đắt)"
+                        except: pass
 
-                    # Cập nhật fa_df với cả debt_display và pe_display
+                    # 3. HỆ THỐNG CHẤM ĐIỂM HIỆU QUẢ SINH LỜI ROE
+                    roe_str = fa_data['roe']
+                    roe_display = roe_str
+                    if roe_str != "N/A":
+                        try:
+                            # Lọc bỏ dấu % nếu có để lấy giá trị số học
+                            roe_val = float(roe_str.replace('%', '').strip())
+                            if roe_val > 15: roe_display = f"{roe_str} 🟢 (Tốt)"
+                            elif roe_val >= 10: roe_display = f"{roe_str} 🟡 (Bình thường)"
+                            else: roe_display = f"{roe_str} 🔴 (Kém)"
+                        except: pass
+
+                    # Đưa toàn bộ các biến display mới vào bảng
                     fa_df = {
                         "Chỉ số": ["Vốn hóa thị trường", "Tỷ lệ Nợ / Vốn CSH", "Tỷ suất Cổ tức", "P/E", "P/B", "ROE (%)"],
-                        "Giá trị": [fa_data['market_cap'], debt_display, fa_data['div_yield'], pe_display, fa_data['pb'], fa_data['roe']]
+                        "Giá trị": [fa_data['market_cap'], debt_display, fa_data['div_yield'], pe_display, fa_data['pb'], roe_display]
                     }
                     st.table(pd.DataFrame(fa_df))                   
                     
