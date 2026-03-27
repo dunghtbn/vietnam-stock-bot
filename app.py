@@ -181,7 +181,7 @@ def plot_chart(df, symbol):
         line_width=1.5,
         annotation_text=f"Giá HT: {current_price:,.0f}", # Gắn luôn nhãn text để dễ nhìn
         annotation_position="bottom right",
-        annotation_font=dict(color="cyan", size=12),
+        annotation_font=dict(color="#ff9800", size=12),
         row=1, col=1
     )
     # -------------------------------------------------------------------------
