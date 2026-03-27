@@ -339,7 +339,7 @@ def main():
         # ---------------------------------------------------
         
         st.info("💡 Mẹo: Chọn 'Tuần' để xem xu hướng dài hạn.")
-        st.success("✨ V5.0: Nâng cấp Real-time & Radar Đa Lớp")
+        st.success("✨ V2.1: Nâng cấp Real-time & Radar Đa Lớp - Thiết kế và lập trình bởi Hoàng Trung Dũng - Email: dung@hdbn.vip")
 
     # --- KHỞI TẠO 2 TAB GIAO DIỆN ---
     tab1, tab2 = st.tabs(["📊 Phân Tích Chuyên Sâu", "🎯 Radar Quét Cổ Phiếu"])
@@ -491,8 +491,7 @@ def main():
                         st.warning("Hệ thống chưa thiết lập API Key. Vui lòng kiểm tra lại cài đặt Secrets trên Streamlit.")
             
                 st.markdown("---")
-                st.caption(f"🕒 *Dữ liệu được cập nhật lần cuối vào lúc: **{current_time}** (Múi giờ Việt Nam)*")
-                st.markdown("<h5 style='text-align: center; color: #1E88E5;'>Thiết kế và Lập trình bởi: Hoàng Trung Dũng - Email: dung@hdbn.vip</h5>", unsafe_allow_html=True)
+                st.caption(f"🕒 *Dữ liệu được cập nhật lần cuối vào lúc: **{current_time}** (Múi giờ Việt Nam)*")                
             else:
                 st.error(f"Không tìm thấy dữ liệu cho mã {symbol}. Vui lòng kiểm tra lại mã cổ phiếu.")
 
