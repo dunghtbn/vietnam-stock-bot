@@ -177,11 +177,11 @@ def plot_chart(df, symbol):
     fig.add_hline(
         y=current_price, 
         line_dash="dash",          # Kiểu nét đứt (có thể đổi thành "dot" nếu muốn nét chấm nhỏ hơn)
-        line_color="cyan",         # Màu xanh lơ cho nổi bật trên nền tối/sáng, bạn có thể đổi thành "white" hoặc "red"
+        line_color="#ff9800",         # Màu xanh lơ cho nổi bật trên nền tối/sáng, bạn có thể đổi thành "white" hoặc "red"
         line_width=1.5,
         annotation_text=f"Giá HT: {current_price:,.0f}", # Gắn luôn nhãn text để dễ nhìn
         annotation_position="bottom right",
-        annotation_font=dict(color="#ff9800", size=12),
+        annotation_font=dict(color="#ff9800", size=13),
         row=1, col=1
     )
     # -------------------------------------------------------------------------
