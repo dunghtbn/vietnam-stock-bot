@@ -179,7 +179,7 @@ def plot_chart(df, symbol):
         line_dash="dash",          
         line_color="#ff9800",      # Chỉnh lại màu cam/vàng cho giống ảnh của bạn
         line_width=1.5,
-        annotation_text=f"Giá hiện tại: {current_price:,.0f}", # Đổi tên nhãn
+        annotation_text=f"Giá hiện tại: {current_price:,.2f}", # Đổi tên nhãn
         annotation_position="bottom left",                       # Chuyển nhãn sang lề trái để không đè nến
         annotation_font=dict(color="#ff9800", size=12),
         row=1, col=1
