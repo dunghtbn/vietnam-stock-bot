@@ -180,7 +180,7 @@ def plot_chart(df, symbol, indicator_choice="RSI"):
     fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['BB_Upper'], fill='tonexty', fillcolor='rgba(33, 150, 243, 0.08)', line=dict(color='rgba(33, 150, 243, 0.3)', width=1), name='Bollinger Bands'), row=1, col=1)
     fig.add_hline(
         y=current_price, line_dash="dash", line_color="#ff9800", line_width=1.5,
-        annotation_text=f"Giá hiện tại: {current_price:,.0f}", annotation_position="bottom left",                       
+        annotation_text=f"Giá hiện tại: {current_price:,.2f}", annotation_position="bottom left",                       
         annotation_font=dict(color="#ff9800", size=12), row=1, col=1
     )
 
