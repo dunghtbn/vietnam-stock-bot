@@ -143,6 +143,9 @@ def calculate_indicators(df):
 
 # --- 3. HÀM VẼ BIỂU ĐỒ NÂNG CẤP (CÓ KHỐI LƯỢNG) ---
 def plot_chart(df, symbol):
+    # TÍNH TOÁN THÊM: Trung bình khối lượng 20 phiên
+    df['Vol_MA20'] = df['Volume'].rolling(window=20).mean()
+    
     plot_df = df.tail(150)
     
     # Lấy giá đóng cửa hiện tại (phiên gần nhất)
@@ -216,6 +219,18 @@ def plot_chart(df, symbol):
         marker_color=colors,
         showlegend=False
     ), row=2, col=1)
+    # -------------------------------------------------------------------------
+    # BỔ SUNG: THÊM ĐƯỜNG TRUNG BÌNH KHỐI LƯỢNG (MA20 VOLUME)
+    # -------------------------------------------------------------------------
+    fig.add_trace(go.Scatter(
+        x=plot_df.index,
+        y=plot_df['Vol_MA20'],
+        mode='lines',
+        line=dict(color='#ff9800', width=1.5), # Màu cam nổi bật trên nền các cột volume
+        name='MA20 Khối lượng',
+        showlegend=False
+    ), row=2, col=1)
+    # -------------------------------------------------------------------------
 
     # Căn chỉnh giao diện tổng thể
     fig.update_layout(
