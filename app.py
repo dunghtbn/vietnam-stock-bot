@@ -293,6 +293,7 @@ def main():
             st.cache_data.clear() 
             st.rerun()            
         st.info("💡 Mẹo: Chọn 'Tuần' để xem xu hướng dài hạn.")
+        st.success("✨ V2.1: Nâng cấp Real-time & Radar Đa Lớp - Thiết kế và lập trình bởi Hoàng Trung Dũng - Email: dung@hdbn.vip")
 
     tab1, tab2, tab3 = st.tabs(["📊 Phân Tích Chuyên Sâu", "🎯 Radar Quét Cổ Phiếu", "💎 Săn Cổ Phiếu Rẻ (Value)"])
     
