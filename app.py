@@ -227,19 +227,30 @@ def plot_chart(df, symbol, indicator_choice="RSI"):
 
     return fig
 # --- 4. HÀM GỌI AI PHÂN TÍCH ---
-def get_ai_analysis(api_key, symbol, current_price, rsi, ma20, status_ma20, bb_status, avg_vol, vol_today, stock_perf, vnindex_perf, rs_status, pe, pb, roe, market_cap, div_yield, debt_to_equity):
+def get_ai_analysis(api_key, symbol, current_price, rsi, ma20, status_ma20, bb_status, avg_vol, vol_today, stock_perf, vnindex_perf, rs_status, pe, pb, roe, market_cap, div_yield, debt_to_equity, indicator_choice, macd, macd_signal, macd_hist):
     if not api_key: return "⚠️ Vui lòng nhập API Key để xem phân tích."
     
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-2.5-flash')
     
+    # -------------------------------------------------------------------------
+    # BỔ SUNG: XỬ LÝ ĐỘNG CÂU PROMPT THEO CHỈ BÁO NGƯỜI DÙNG CHỌN
+    # -------------------------------------------------------------------------
+    if indicator_choice == "RSI":
+        momentum_prompt = f"- RSI(14): {rsi:.2f} (Hãy đánh giá xem đang ở vùng quá mua, quá bán hay tích lũy)"
+    else:
+        # Tự động tính toán giao cắt MACD
+        giao_cat = "CẮT LÊN (Tín hiệu mua/tích cực)" if macd > macd_signal else "CẮT XUỐNG (Tín hiệu bán/tiêu cực)"
+        momentum_prompt = f"- MACD: Đường MACD ({macd:.3f}) đang {giao_cat} đường Signal ({macd_signal:.3f}). Histogram đang ở mức {macd_hist:.3f}. Hãy phân tích xung lượng dựa trên giao cắt này."
+    # -------------------------------------------------------------------------
+
     prompt = f"""Role: Bạn là Chuyên gia Phân tích Chứng khoán Top 1 tại Việt Nam. Bạn kết hợp xuất sắc cả Phân tích Kỹ thuật (TA) và Phân tích Cơ bản (FA) để ra quyết định an toàn nhất. Không đoán mò.
 
 Task: Phân tích mã {symbol} dựa trên bộ dữ liệu toàn diện sau:
 
 1. DỮ LIỆU KỸ THUẬT (TA) & DÒNG TIỀN:
 - Giá hiện tại: {current_price:,.2f}
-- RSI(14): {rsi:.2f}
+{momentum_prompt}
 - MA20: {ma20:,.2f} (Giá đang {status_ma20} đường MA20)
 - Bollinger Bands: {bb_status}
 - Volume: TB 10 phiên là {avg_vol:,.0f}, Hôm nay là {vol_today:,.0f}
@@ -261,7 +272,7 @@ Yêu cầu output format:
 💡 **LÝ DO:** [Giải thích sắc bén sự hội tụ giữa đồ thị và sức khỏe tài chính doanh nghiệp]
 """
     try:
-        with st.spinner('🤖 AI đang đánh giá Toàn diện rủi ro (FA + TA)...'):
+        with st.spinner(f'🤖 AI đang đọc biểu đồ {indicator_choice} và đánh giá Toàn diện rủi ro (FA + TA)...'):
             response = model.generate_content(prompt)
             return response.text
     except Exception as e:
