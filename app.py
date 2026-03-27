@@ -430,7 +430,10 @@ def main():
                                 bb_status=bb_status, avg_vol=avg_vol, vol_today=vol_today,
                                 stock_perf=stock_perf, vnindex_perf=vnindex_perf, rs_status=rs_status.split()[0],
                                 pe=fa_data['pe'], pb=fa_data['pb'], roe=fa_data['roe'],
-                                market_cap=fa_data['market_cap'], div_yield=fa_data['div_yield'], debt_to_equity=fa_data['debt_to_equity']
+                                market_cap=fa_data['market_cap'], div_yield=fa_data['div_yield'], debt_to_equity=fa_data['debt_to_equity'],
+                                # --- BỔ SUNG TRUYỀN DỮ LIỆU ĐỘNG CHO AI ---
+                                indicator_choice=indicator_choice,
+                                macd=last_row['MACD'], macd_signal=last_row['MACD_Signal'], macd_hist=last_row['MACD_Hist']
                             )
                             st.session_state.ai_analysis = analysis
                             st.session_state.analyzed_symbol = symbol
