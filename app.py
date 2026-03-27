@@ -424,12 +424,31 @@ def main():
                             pass # Bỏ qua nếu lỗi chuyển đổi
                     # -------------------------------------------------------------------------
 
-                    # Thay thế fa_data['debt_to_equity'] bằng biến debt_display mới tạo
+                    # -------------------------------------------------------------------------
+                    # BỔ SUNG: HỆ THỐNG CHẤM ĐIỂM ĐỊNH GIÁ P/E
+                    # -------------------------------------------------------------------------
+                    pe_str = fa_data['pe']
+                    pe_display = pe_str
+                    
+                    if pe_str != "N/A":
+                        try:
+                            pe_val = float(pe_str)
+                            if pe_val < 10:
+                                pe_display = f"{pe_str} 🟢 (Rẻ)"
+                            elif pe_val <= 20:
+                                pe_display = f"{pe_str} 🟡 (Hợp lý)"
+                            else:
+                                pe_display = f"{pe_str} 🔴 (Đắt)"
+                        except:
+                            pass
+                    # -------------------------------------------------------------------------
+
+                    # Cập nhật fa_df với cả debt_display và pe_display
                     fa_df = {
                         "Chỉ số": ["Vốn hóa thị trường", "Tỷ lệ Nợ / Vốn CSH", "Tỷ suất Cổ tức", "P/E", "P/B", "ROE (%)"],
-                        "Giá trị": [fa_data['market_cap'], debt_display, fa_data['div_yield'], fa_data['pe'], fa_data['pb'], fa_data['roe']]
+                        "Giá trị": [fa_data['market_cap'], debt_display, fa_data['div_yield'], pe_display, fa_data['pb'], fa_data['roe']]
                     }
-                    st.table(pd.DataFrame(fa_df))
+                    st.table(pd.DataFrame(fa_df))                   
                     
                     status_ma20 = "nằm trên" if last_row['Close'] > last_row['MA20'] else "nằm dưới"
                     if last_row['Close'] >= last_row['BB_Upper']: bb_status = "Chạm/Vượt Band trên (Quá mua)"
