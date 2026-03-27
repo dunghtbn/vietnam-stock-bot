@@ -401,9 +401,33 @@ def main():
                     st.table(pd.DataFrame(tech_data))
                     
                     st.subheader("🏢 Chỉ số Cơ bản & Sức khỏe")
+                    
+                    # -------------------------------------------------------------------------
+                    # BỔ SUNG: HỆ THỐNG CẢNH BÁO RỦI RO NỢ (DEBT TO EQUITY)
+                    # -------------------------------------------------------------------------
+                    debt_str = fa_data['debt_to_equity']
+                    debt_display = debt_str
+                    
+                    if debt_str != "N/A":
+                        try:
+                            # Tách bỏ dấu '%' để lấy giá trị số thực
+                            debt_val = float(debt_str.replace('%', '').strip())
+                            
+                            # Phân loại rủi ro
+                            if debt_val < 100:
+                                debt_display = f"{debt_str} 🟢 (An toàn)"
+                            elif debt_val <= 200:
+                                debt_display = f"{debt_str} 🟡 (Lưu ý)"
+                            else:
+                                debt_display = f"{debt_str} 🔴 (Rủi ro cao)"
+                        except:
+                            pass # Bỏ qua nếu lỗi chuyển đổi
+                    # -------------------------------------------------------------------------
+
+                    # Thay thế fa_data['debt_to_equity'] bằng biến debt_display mới tạo
                     fa_df = {
                         "Chỉ số": ["Vốn hóa thị trường", "Tỷ lệ Nợ / Vốn CSH", "Tỷ suất Cổ tức", "P/E", "P/B", "ROE (%)"],
-                        "Giá trị": [fa_data['market_cap'], fa_data['debt_to_equity'], fa_data['div_yield'], fa_data['pe'], fa_data['pb'], fa_data['roe']]
+                        "Giá trị": [fa_data['market_cap'], debt_display, fa_data['div_yield'], fa_data['pe'], fa_data['pb'], fa_data['roe']]
                     }
                     st.table(pd.DataFrame(fa_df))
                     
