@@ -130,7 +130,39 @@ def load_fundamental_data(symbol):
             'pe': 'N/A', 'pb': 'N/A', 'roe': 'N/A', 
             'market_cap': 'N/A', 'div_yield': 'N/A', 'debt_to_equity': 'N/A'
         }
+import math
 
+@st.cache_data(ttl=86400)
+def get_valuation_metrics(symbol):
+    """Lấy dữ liệu EPS, BVPS và tính Giá trị hợp lý theo Benjamin Graham"""
+    try:
+        ticker = yf.Ticker(f"{symbol}.VN")
+        info = ticker.info
+        
+        eps = info.get('trailingEps')
+        bvps = info.get('bookValue')
+        current_price = info.get('currentPrice') or info.get('previousClose')
+        
+        # Chỉ tính Graham Number nếu doanh nghiệp làm ăn có lãi (EPS > 0 và BVPS > 0)
+        if eps and bvps and eps > 0 and bvps > 0:
+            graham_value = math.sqrt(22.5 * eps * bvps)
+            
+            if current_price and current_price > 0:
+                upside_pct = ((graham_value - current_price) / current_price) * 100
+            else:
+                upside_pct = 0
+                
+            return {
+                'price': current_price,
+                'fair_value': graham_value,
+                'upside': upside_pct,
+                'eps': eps,
+                'bvps': bvps
+            }
+    except Exception as e:
+        pass
+    
+    return {'price': 0, 'fair_value': 0, 'upside': 0, 'eps': 0, 'bvps': 0}
 def calculate_indicators(df):
     df['RSI'] = ta.momentum.RSIIndicator(close=df['Close'], window=14).rsi()
     df['MA20'] = ta.trend.SMAIndicator(close=df['Close'], window=20).sma_indicator()
@@ -341,8 +373,8 @@ def main():
         st.info("💡 Mẹo: Chọn 'Tuần' để xem xu hướng dài hạn.")
         st.success("✨ V2.1: Nâng cấp Real-time & Radar Đa Lớp - Thiết kế và lập trình bởi Hoàng Trung Dũng - Email: dung@hdbn.vip")
 
-    # --- KHỞI TẠO 2 TAB GIAO DIỆN ---
-    tab1, tab2 = st.tabs(["📊 Phân Tích Chuyên Sâu", "🎯 Radar Quét Cổ Phiếu"])
+    # --- KHỞI TẠO 3 TAB GIAO DIỆN ---
+    tab1, tab2, tab3 = st.tabs(["📊 Phân Tích Chuyên Sâu", "🎯 Radar Quét Cổ Phiếu", "💎 Săn Cổ Phiếu Rẻ (Value)"])
     
     # --- GIAO DIỆN TAB 1 ---
     with tab1:
@@ -622,5 +654,87 @@ def main():
                     st.info(st.session_state.radar_ai_pick)
             else:
                 st.warning("Khung thị trường hiện tại không có mã nào thỏa mãn toàn bộ các điều kiện này.")
+    # --- GIAO DIỆN TAB 3: ĐỊNH GIÁ THẤP (VALUE INVESTING) ---
+    with tab3:
+        st.subheader("⚖️ Bảng Xếp Hạng Định Giá Cổ Phiếu (Fair Value)")
+        st.markdown("Mô phỏng tính năng **Định giá thấp nhất** dựa trên công thức Giá trị hợp lý của Benjamin Graham kết hợp Sức khỏe tài chính.")
+        
+        val_tickers_input = st.text_input("Nhập danh sách mã để chấm điểm định giá:", "HPG, SSI, VND, DBC, VNM, TCB, MBB, FPT, MWG, REE, VCB", key="val_input")
+        
+        if st.button("🔍 Quét Định Giá & Tiềm Năng", use_container_width=True):
+            val_tickers = [x.strip().upper() for x in val_tickers_input.split(",") if x.strip()]
+            val_results = []
+            
+            progress_bar = st.progress(0, text="Đang thu thập báo cáo tài chính và tính toán Fair Value...")
+            
+            for i, t in enumerate(val_tickers):
+                progress_bar.progress((i + 1) / len(val_tickers), text=f"Đang định giá mã {t}...")
+                
+                # Lấy dữ liệu
+                val_data = get_valuation_metrics(t)
+                fa_data = load_fundamental_data(t)
+                
+                if val_data['fair_value'] > 0:
+                    # Chấm điểm Sức khỏe tài chính cơ bản (Dựa trên ROE và Nợ)
+                    health_score = "Bình thường"
+                    roe_val = 0
+                    if fa_data['roe'] != "N/A":
+                        try: roe_val = float(fa_data['roe'].replace('%', ''))
+                        except: pass
+                    
+                    debt_val = 999
+                    if fa_data['debt_to_equity'] != "N/A":
+                        try: debt_val = float(fa_data['debt_to_equity'].replace('%', ''))
+                        except: pass
+                        
+                    if roe_val > 15 and debt_val < 100: health_score = "Xuất sắc 🌟"
+                    elif roe_val > 10 and debt_val < 200: health_score = "Tốt ✅"
+                    elif roe_val < 5 or debt_val > 200: health_score = "Yếu ⚠️"
+
+                    # Chấm điểm P/E
+                    pe_rating = "Hợp lý"
+                    if fa_data['pe'] != "N/A":
+                        try:
+                            pe_val = float(fa_data['pe'])
+                            if pe_val < 10: pe_rating = "Rất Rẻ 🟢"
+                            elif pe_val > 20: pe_rating = "Đắt 🔴"
+                        except: pass
+
+                    val_results.append({
+                        "Mã CP": t,
+                        "Giá HT": val_data['price'],
+                        "Giá trị Hợp lý": val_data['fair_value'],
+                        "Tăng lên (%)": val_data['upside'],
+                        "Sức Khỏe TC": health_score,
+                        "Định giá P/E": pe_rating,
+                        "Tỉ số P/E": fa_data['pe'],
+                        "ROE (%)": fa_data['roe'],
+                        "Vốn hóa": fa_data['market_cap']
+                    })
+            
+            progress_bar.empty()
+            
+            if val_results:
+                # Sắp xếp theo Tiềm năng tăng giá (Upside) từ cao xuống thấp
+                df_val = pd.DataFrame(val_results)
+                df_val = df_val.sort_values(by="Tăng lên (%)", ascending=False).reset_index(drop=True)
+                
+                # Format lại số liệu cho đẹp
+                df_val['Giá HT'] = df_val['Giá HT'].apply(lambda x: f"{x:,.0f}")
+                df_val['Giá trị Hợp lý'] = df_val['Giá trị Hợp lý'].apply(lambda x: f"{x:,.0f}")
+                
+                # Định dạng màu cho cột Tăng lên (%) giống Investing.com
+                def color_upside(val):
+                    if val > 20: return 'color: #00FF00; font-weight: bold' # Xanh rực rỡ nếu upside > 20%
+                    elif val > 0: return 'color: #26a69a'                   # Xanh nhẹ nếu có upside
+                    return 'color: #ef5350'                                 # Đỏ nếu đang bị định giá cao hơn giá trị thực
+                
+                # Áp dụng styling cho DataFrame
+                styled_df = df_val.style.map(color_upside, subset=['Tăng lên (%)']).format({"Tăng lên (%)": "{:+.2f}%"})
+                
+                st.success("Tạo bảng định giá hoàn tất! Các mã xếp trên cùng là các mã đang có biên an toàn lớn nhất.")
+                st.dataframe(styled_df, use_container_width=True, hide_index=True)
+            else:
+                st.warning("Không có dữ liệu định giá (EPS, BVPS) cho các mã này hoặc các mã đều đang làm ăn thua lỗ (EPS âm).")
 if __name__ == "__main__":
     main()
