@@ -147,28 +147,25 @@ def plot_chart(df, symbol):
     df['Vol_MA20'] = df['Volume'].rolling(window=20).mean()
     
     plot_df = df.tail(150)
-    # -------------------------------------------------------------------------
-        # BỔ SUNG: LOGIC ĐỔI MÀU CỘT KHỐI LƯỢNG KHI CÓ ĐỘT BIẾN
-        # -------------------------------------------------------------------------
-        colors = []
-        for index, row in plot_df.iterrows():
-            is_up = row['Close'] >= row['Open']
-            
-            # Kiểm tra xem có phải phiên bùng nổ thanh khoản không (> 1.5 lần trung bình)
-            # Dùng pd.notna để tránh lỗi toán học nếu MA20 chưa có dữ liệu ở các phiên đầu
-            if pd.notna(row['Vol_MA20']) and row['Volume'] >= 1.5 * row['Vol_MA20']:
-                # Màu rực rỡ: Xanh lá mạ (Neon Green) cho phiên tăng, Đỏ tươi (Neon Red) cho phiên giảm
-                colors.append('#00FF00' if is_up else '#FF0000') 
-            else:
-                # Màu trầm bình thường (Teal / Muted Red)
-                colors.append('#26a69a' if is_up else '#ef5350')
-        # -------------------------------------------------------------------------
-    
+        
     # Lấy giá đóng cửa hiện tại (phiên gần nhất)
     current_price = df['Close'].iloc[-1]
     
-    # Tạo danh sách màu cho cột Khối lượng: Xanh nếu Giá Đóng >= Giá Mở, Đỏ nếu ngược lại
-    colors = ['#26a69a' if row['Close'] >= row['Open'] else '#ef5350' for index, row in plot_df.iterrows()]
+    # -------------------------------------------------------------------------
+    # BỔ SUNG: LOGIC ĐỔI MÀU CỘT KHỐI LƯỢNG KHI CÓ ĐỘT BIẾN
+    # -------------------------------------------------------------------------
+    colors = []
+    for index, row in plot_df.iterrows():
+        is_up = row['Close'] >= row['Open']
+        
+        # Kiểm tra xem có phải phiên bùng nổ thanh khoản không (> 1.5 lần trung bình)
+        if pd.notna(row['Vol_MA20']) and row['Volume'] >= 1.5 * row['Vol_MA20']:
+            # Màu rực rỡ: Xanh lá mạ (Neon Green) cho phiên tăng, Đỏ tươi (Neon Red) cho phiên giảm
+            colors.append('#00FF00' if is_up else '#FF0000') 
+        else:
+            # Màu trầm bình thường (Teal / Muted Red)
+            colors.append('#26a69a' if is_up else '#ef5350')
+    # -------------------------------------------------------------------------
 
     # Chia bố cục biểu đồ thành 2 tầng (80% cho Giá, 20% cho Khối lượng)
     fig = make_subplots(
@@ -189,6 +186,7 @@ def plot_chart(df, symbol):
     # Thêm các đường MA vào Tầng 1
     fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['MA20'], line=dict(color='yellow', width=1.5), name='MA20'), row=1, col=1)
     fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['MA50'], line=dict(color='purple', width=1.5), name='MA50'), row=1, col=1)
+    
     # -------------------------------------------------------------------------
     # BỔ SUNG: VẼ DẢI BOLLINGER BANDS VÀ TÔ MỜ Ở GIỮA (SHADED REGION)
     # -------------------------------------------------------------------------
@@ -213,15 +211,15 @@ def plot_chart(df, symbol):
     # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
-    # BỔ SUNG: THÊM ĐƯỜNG KẺ NGANG ĐỨT NÉT THỂ HIỆN GIÁ HIỆN TẠI
+    # BỔ SUNG: THÊM ĐƯỜNG KẺ NGANG ĐỨT NÉT THỂ HIỆN GIÁ THAM CHIẾU
     # -------------------------------------------------------------------------
     fig.add_hline(
         y=current_price, 
         line_dash="dash",          
-        line_color="#ff9800",      # Chỉnh lại màu cam/vàng cho giống ảnh của bạn
+        line_color="#ff9800",      
         line_width=1.5,
-        annotation_text=f"Giá hiện tại: {current_price:,.2f}", # Đổi tên nhãn
-        annotation_position="bottom left",                       # Chuyển nhãn sang lề trái để không đè nến
+        annotation_text=f"Giá hiện tại: {current_price:,.0f}", # Đã sửa thành "Giá tham chiếu"
+        annotation_position="bottom left",                       
         annotation_font=dict(color="#ff9800", size=12),
         row=1, col=1
     )
@@ -232,9 +230,10 @@ def plot_chart(df, symbol):
         x=plot_df.index, 
         y=plot_df['Volume'],
         name='Khối lượng',
-        marker_color=colors,
+        marker_color=colors, # Đã áp dụng dải màu mới có Neon
         showlegend=False
     ), row=2, col=1)
+    
     # -------------------------------------------------------------------------
     # BỔ SUNG: THÊM ĐƯỜNG TRUNG BÌNH KHỐI LƯỢNG (MA20 VOLUME)
     # -------------------------------------------------------------------------
@@ -242,7 +241,7 @@ def plot_chart(df, symbol):
         x=plot_df.index,
         y=plot_df['Vol_MA20'],
         mode='lines',
-        line=dict(color='#ff9800', width=1.5), # Màu cam nổi bật trên nền các cột volume
+        line=dict(color='#ff9800', width=1.5), 
         name='MA20 Khối lượng',
         showlegend=False
     ), row=2, col=1)
@@ -253,7 +252,7 @@ def plot_chart(df, symbol):
         title=f"Biểu đồ Kỹ thuật {symbol}",
         yaxis_title='Giá (VND)',
         yaxis2_title='Khối lượng',
-        height=700, # Tăng nhẹ chiều cao tổng thể để có không gian cho tầng khối lượng
+        height=700, 
         margin=dict(l=20, r=20, t=40, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
@@ -262,7 +261,6 @@ def plot_chart(df, symbol):
     fig.update_xaxes(rangeslider_visible=False)
 
     return fig
-
 # --- 4. HÀM GỌI AI PHÂN TÍCH ---
 def get_ai_analysis(api_key, symbol, current_price, rsi, ma20, status_ma20, bb_status, avg_vol, vol_today, stock_perf, vnindex_perf, rs_status, pe, pb, roe, market_cap, div_yield, debt_to_equity):
     if not api_key: return "⚠️ Vui lòng nhập API Key để xem phân tích."
