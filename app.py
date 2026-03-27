@@ -8,6 +8,7 @@ import google.generativeai as genai
 import requests
 import yfinance as yf
 from plotly.subplots import make_subplots
+import math
 
 # --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(
@@ -60,7 +61,6 @@ def load_data(symbol, timeframe):
 
 @st.cache_data(ttl=300)
 def load_vnindex_data(timeframe):
-    """Kéo dữ liệu Ngày (1D) từ KBS và tự động gom thành nến Tuần (1W) bằng Pandas"""
     end_date = date.today().strftime("%Y-%m-%d")
     start_date = (date.today() - timedelta(days=730)).strftime("%Y-%m-%d") 
     
@@ -94,7 +94,6 @@ def load_vnindex_data(timeframe):
 
 @st.cache_data(ttl=86400) 
 def load_fundamental_data(symbol):
-    """Sử dụng 100% Yahoo Finance: Lấy P/E, P/B, ROE, Vốn hóa, Cổ tức, Nợ/Vốn"""
     try:
         ticker = yf.Ticker(f"{symbol}.VN")
         info = ticker.info
@@ -130,7 +129,6 @@ def load_fundamental_data(symbol):
             'pe': 'N/A', 'pb': 'N/A', 'roe': 'N/A', 
             'market_cap': 'N/A', 'div_yield': 'N/A', 'debt_to_equity': 'N/A'
         }
-import math
 
 @st.cache_data(ttl=86400)
 def get_valuation_metrics(symbol):
@@ -143,7 +141,6 @@ def get_valuation_metrics(symbol):
         bvps = info.get('bookValue')
         current_price = info.get('currentPrice') or info.get('previousClose')
         
-        # Chỉ tính Graham Number nếu doanh nghiệp làm ăn có lãi (EPS > 0 và BVPS > 0)
         if eps and bvps and eps > 0 and bvps > 0:
             graham_value = math.sqrt(22.5 * eps * bvps)
             
@@ -163,6 +160,7 @@ def get_valuation_metrics(symbol):
         pass
     
     return {'price': 0, 'fair_value': 0, 'upside': 0, 'eps': 0, 'bvps': 0}
+
 def calculate_indicators(df):
     df['RSI'] = ta.momentum.RSIIndicator(close=df['Close'], window=14).rsi()
     df['MA20'] = ta.trend.SMAIndicator(close=df['Close'], window=20).sma_indicator()
@@ -171,18 +169,14 @@ def calculate_indicators(df):
     indicator_bb = ta.volatility.BollingerBands(close=df['Close'], window=20, window_dev=2)
     df['BB_Upper'] = indicator_bb.bollinger_hband()
     df['BB_Lower'] = indicator_bb.bollinger_lband()
-    # -------------------------------------------------------------------------
-    # BỔ SUNG: TÍNH TOÁN MACD
-    # -------------------------------------------------------------------------
+    
     macd = ta.trend.MACD(close=df['Close'])
     df['MACD'] = macd.macd()
     df['MACD_Signal'] = macd.macd_signal()
     df['MACD_Hist'] = macd.macd_diff()
-    # -------------------------------------------------------------------------
     return df
 
-# --- 3. HÀM VẼ BIỂU ĐỒ NÂNG CẤP (CÓ KHỐI LƯỢNG & TẦNG 3 TUỲ BIẾN) ---
-# SỬA LẠI: Thêm tham số indicator_choice
+# --- 3. HÀM VẼ BIỂU ĐỒ NÂNG CẤP ---
 def plot_chart(df, symbol, indicator_choice="RSI"): 
     df['Vol_MA20'] = df['Volume'].rolling(window=20).mean()
     plot_df = df.tail(150)
@@ -201,63 +195,38 @@ def plot_chart(df, symbol, indicator_choice="RSI"):
         shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.6, 0.2, 0.2] 
     )
 
-    # [TẦNG 1] Nến Nhật, MA, Bollinger Bands, Đường kẻ ngang
-    fig.add_trace(go.Candlestick(
-        x=plot_df.index, open=plot_df['Open'], high=plot_df['High'],
-        low=plot_df['Low'], close=plot_df['Close'], name='Giá', increasing_line_color='#26a69a', decreasing_line_color='#ef5350'
-    ), row=1, col=1)
+    fig.add_trace(go.Candlestick(x=plot_df.index, open=plot_df['Open'], high=plot_df['High'], low=plot_df['Low'], close=plot_df['Close'], name='Giá', increasing_line_color='#26a69a', decreasing_line_color='#ef5350'), row=1, col=1)
     fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['MA20'], line=dict(color='yellow', width=1.5), name='MA20'), row=1, col=1)
     fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['MA50'], line=dict(color='purple', width=1.5), name='MA50'), row=1, col=1)
     fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['BB_Lower'], line=dict(color='rgba(33, 150, 243, 0.3)', width=1), name='BB Lower', showlegend=False), row=1, col=1)
     fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['BB_Upper'], fill='tonexty', fillcolor='rgba(33, 150, 243, 0.08)', line=dict(color='rgba(33, 150, 243, 0.3)', width=1), name='Bollinger Bands'), row=1, col=1)
-    fig.add_hline(
-        y=current_price, line_dash="dash", line_color="#ff9800", line_width=1.5,
-        annotation_text=f"Giá hiện tại: {current_price:,.2f}", annotation_position="bottom left",                       
-        annotation_font=dict(color="#ff9800", size=12), row=1, col=1
-    )
+    fig.add_hline(y=current_price, line_dash="dash", line_color="#ff9800", line_width=1.5, annotation_text=f"Giá hiện tại: {current_price:,.2f}", annotation_position="bottom left", annotation_font=dict(color="#ff9800", size=12), row=1, col=1)
 
-    # [TẦNG 2] Khối lượng
     fig.add_trace(go.Bar(x=plot_df.index, y=plot_df['Volume'], name='Khối lượng', marker_color=colors, showlegend=False), row=2, col=1)
     fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Vol_MA20'], mode='lines', line=dict(color='#ff9800', width=1.5), name='MA20 Khối lượng', showlegend=False), row=2, col=1)
 
-    # -------------------------------------------------------------------------
-    # [TẦNG 3] BỔ SUNG: LOGIC VẼ RSI HOẶC MACD
-    # -------------------------------------------------------------------------
     if indicator_choice == "RSI":
         fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['RSI'], mode='lines', line=dict(color='#E1BEE7', width=1.5), name='RSI', showlegend=False), row=3, col=1)
         fig.add_hrect(y0=30, y1=70, fillcolor="purple", opacity=0.1, line_width=0, row=3, col=1)
         fig.add_hline(y=70, line_dash="dot", line_color="red", line_width=1, row=3, col=1)
         fig.add_hline(y=30, line_dash="dot", line_color="#26a69a", line_width=1, row=3, col=1)
-        fig.update_yaxes(range=[0, 100], row=3, col=1) # Khóa range cho RSI
+        fig.update_yaxes(range=[0, 100], row=3, col=1) 
         yaxis3_title = 'RSI (14)'
     else:
-        # Tô màu MACD Histogram: Xanh nếu dương, Đỏ nếu âm
         macd_colors = ['#26a69a' if val >= 0 else '#ef5350' for val in plot_df['MACD_Hist']]
-        
-        # Vẽ Histogram (Cột)
         fig.add_trace(go.Bar(x=plot_df.index, y=plot_df['MACD_Hist'], marker_color=macd_colors, name='MACD Hist', showlegend=False), row=3, col=1)
-        # Vẽ đường MACD (Xanh)
         fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['MACD'], mode='lines', line=dict(color='#2962FF', width=1.5), name='MACD', showlegend=False), row=3, col=1)
-        # Vẽ đường Signal (Cam)
         fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['MACD_Signal'], mode='lines', line=dict(color='#FF6D00', width=1.5), name='Signal', showlegend=False), row=3, col=1)
-        
-        # Bỏ khóa range cho MACD vì MACD dao động tự do quanh trục 0
         fig.update_yaxes(autorange=True, row=3, col=1) 
         yaxis3_title = 'MACD'
-    # -------------------------------------------------------------------------
 
     fig.update_layout(
-        title=f"Biểu đồ Kỹ thuật {symbol}",
-        yaxis_title='Giá (VND)',
-        yaxis2_title='Khối lượng',
-        yaxis3_title=yaxis3_title, # Cập nhật tên trục linh hoạt
-        height=850,              
-        margin=dict(l=20, r=20, t=40, b=20),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        title=f"Biểu đồ Kỹ thuật {symbol}", yaxis_title='Giá (VND)', yaxis2_title='Khối lượng', yaxis3_title=yaxis3_title, 
+        height=850, margin=dict(l=20, r=20, t=40, b=20), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
     fig.update_xaxes(rangeslider_visible=False)
-
     return fig
+
 # --- 4. HÀM GỌI AI PHÂN TÍCH ---
 def get_ai_analysis(api_key, symbol, current_price, rsi, ma20, status_ma20, bb_status, avg_vol, vol_today, stock_perf, vnindex_perf, rs_status, pe, pb, roe, market_cap, div_yield, debt_to_equity, indicator_choice, macd, macd_signal, macd_hist):
     if not api_key: return "⚠️ Vui lòng nhập API Key để xem phân tích."
@@ -265,80 +234,44 @@ def get_ai_analysis(api_key, symbol, current_price, rsi, ma20, status_ma20, bb_s
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-2.5-flash')
     
-    # -------------------------------------------------------------------------
-    # BỔ SUNG: XỬ LÝ ĐỘNG CÂU PROMPT THEO CHỈ BÁO NGƯỜI DÙNG CHỌN
-    # -------------------------------------------------------------------------
-    if indicator_choice == "RSI":
-        momentum_prompt = f"- RSI(14): {rsi:.2f} (Hãy đánh giá xem đang ở vùng quá mua, quá bán hay tích lũy)"
+    if indicator_choice == "RSI": momentum_prompt = f"- RSI(14): {rsi:.2f} (Hãy đánh giá xem đang ở vùng quá mua, quá bán hay tích lũy)"
     else:
-        # Tự động tính toán giao cắt MACD
         giao_cat = "CẮT LÊN (Tín hiệu mua/tích cực)" if macd > macd_signal else "CẮT XUỐNG (Tín hiệu bán/tiêu cực)"
-        momentum_prompt = f"- MACD: Đường MACD ({macd:.3f}) đang {giao_cat} đường Signal ({macd_signal:.3f}). Histogram đang ở mức {macd_hist:.3f}. Hãy phân tích xung lượng dựa trên giao cắt này."
-    # -------------------------------------------------------------------------
+        momentum_prompt = f"- MACD: Đường MACD ({macd:.3f}) đang {giao_cat} đường Signal ({macd_signal:.3f}). Histogram đang ở mức {macd_hist:.3f}."
 
-    prompt = f"""Role: Bạn là Chuyên gia Phân tích Chứng khoán Top 1 tại Việt Nam. Bạn kết hợp xuất sắc cả Phân tích Kỹ thuật (TA) và Phân tích Cơ bản (FA) để ra quyết định an toàn nhất. Không đoán mò.
-
-Task: Phân tích mã {symbol} dựa trên bộ dữ liệu toàn diện sau:
-
-1. DỮ LIỆU KỸ THUẬT (TA) & DÒNG TIỀN:
-- Giá hiện tại: {current_price:,.2f}
-{momentum_prompt}
-- MA20: {ma20:,.2f} (Giá đang {status_ma20} đường MA20)
-- Bollinger Bands: {bb_status}
-- Volume: TB 10 phiên là {avg_vol:,.0f}, Hôm nay là {vol_today:,.0f}
-- Sức mạnh giá (20 phiên): Mã {symbol} thay đổi {stock_perf:.2f}%, trong khi VN-Index thay đổi {vnindex_perf:.2f}% -> Cổ phiếu này đang {rs_status} thị trường chung.
-
-2. DỮ LIỆU CƠ BẢN (FA) & ĐỘ AN TOÀN:
-- Quy mô Vốn hóa: {market_cap}
-- Định giá: P/E: {pe} | P/B: {pb}
-- Hiệu quả sinh lời: ROE: {roe}%
-- Tỷ suất cổ tức (Bảo vệ rủi ro): {div_yield}
-- Tỷ lệ Nợ/Vốn CSH (Rủi ro phá sản): {debt_to_equity}
-
-Yêu cầu output format:
-📊 **TỔNG QUAN:** [Đánh giá xu hướng kỹ thuật + Sức khỏe tài chính dựa trên Cổ tức & Tỷ lệ Nợ + Định giá đắt/rẻ]
-🎯 **KHUYẾN NGHỊ:** [MUA MẠNH / MUA THĂM DÒ / BÁN / QUAN SÁT]
-1. Vùng mua an toàn: [Giá A - Giá B]
-2. Mục tiêu chốt lời (Target): [Giá C] (Ngắn hạn)
-3. Điểm cắt lỗ (Stoploss): [Giá D] (Bắt buộc)
-💡 **LÝ DO:** [Giải thích sắc bén sự hội tụ giữa đồ thị và sức khỏe tài chính doanh nghiệp]
-"""
+    prompt = f"""Role: Bạn là Chuyên gia Phân tích Chứng khoán. Phân tích mã {symbol}:
+1. DỮ LIỆU KỸ THUẬT: Giá: {current_price:,.2f} | {momentum_prompt} | MA20: {ma20:,.2f} ({status_ma20}) | BB: {bb_status} | Vol nay: {vol_today:,.0f} | RS 20 phiên: {rs_status}
+2. DỮ LIỆU CƠ BẢN: Vốn hóa: {market_cap} | P/E: {pe} | P/B: {pb} | ROE: {roe}% | Cổ tức: {div_yield} | Nợ/Vốn: {debt_to_equity}
+Output: 📊 TỔNG QUAN | 🎯 KHUYẾN NGHỊ (Vùng mua, Target, Stoploss) | 💡 LÝ DO."""
     try:
-        with st.spinner(f'🤖 AI đang đọc biểu đồ {indicator_choice} và đánh giá Toàn diện rủi ro (FA + TA)...'):
-            response = model.generate_content(prompt)
-            return response.text
-    except Exception as e:
-        return f"Lỗi AI: {e}"
+        with st.spinner(f'🤖 AI đang đọc biểu đồ {indicator_choice}...'):
+            return model.generate_content(prompt).text
+    except Exception as e: return f"Lỗi AI: {e}"
 
-# --- 4.5. HÀM AI SO SÁNH & CHỌN LỌC SIÊU CỔ PHIẾU ---
 def get_ai_best_pick(api_key, results_list):
-    if not api_key: return "⚠️ Vui lòng nhập API Key để dùng tính năng này."
-    
+    if not api_key: return "⚠️ Vui lòng nhập API Key."
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-2.5-flash')
-    
-    # Gom thông tin các mã cổ phiếu đạt chuẩn thành một bản báo cáo cho AI
-    stocks_info = ""
-    for r in results_list:
-        stocks_info += f"- Mã {r['Mã CP']}: Giá {r['Giá Đóng Cửa']}, RSI {r['RSI']}, MA20 {r['MA20']}, Khối lượng {r['Khối Lượng']}, ROE {r['ROE (%)']}%, P/E {r['P/E']}\n"
-        
-    prompt = f"""Role: Bạn là Giám đốc Đầu tư (CIO) quản lý quỹ phòng hộ. 
-    Task: Radar của tôi vừa lọc ra được danh sách các cổ phiếu đã vượt qua cả điều kiện kỹ thuật (dòng tiền) và cơ bản (lợi nhuận) sau:
-    {stocks_info}
-    
-    Dựa trên nền tảng kỹ thuật (RSI, Giá so với MA20) kết hợp với định giá & sinh lời (ROE, P/E), hãy chọn ra ĐÚNG 1 MÃ an toàn và có khả năng bùng nổ cao nhất để giải ngân ngay.
-    
-    Yêu cầu output format:
-    🏆 **SIÊU CỔ PHIẾU LỰA CHỌN:** [Tên mã]
-    💡 **LÝ DO CHIẾN THẮNG:** [Tại sao mã này vượt trội hơn các mã khác về cả FA lẫn TA]
-    🎯 **KẾ HOẠCH HÀNH ĐỘNG:** [Khuyến nghị Vùng giá mua, Mục tiêu chốt lời, Điểm cắt lỗ tuyệt đối]
-    """
+    stocks_info = "\n".join([f"- {r['Mã CP']}: Giá {r['Giá Đóng Cửa']}, RSI {r['RSI']}, MA20 {r['MA20']}, ROE {r['ROE (%)']}%, P/E {r['P/E']}" for r in results_list])
+    prompt = f"Role: CIO quỹ phòng hộ. Chọn 1 mã tốt nhất từ danh sách:\n{stocks_info}\nOutput: 🏆 MÃ CHỌN | 💡 LÝ DO | 🎯 KẾ HOẠCH HÀNH ĐỘNG."
     try:
-        with st.spinner('🤖 Giám đốc AI đang chấm điểm định giá và dòng tiền từng mã...'):
-            response = model.generate_content(prompt)
-            return response.text
-    except Exception as e:
-        return f"Lỗi AI: {e}"
+        with st.spinner('🤖 AI đang chấm điểm...'): return model.generate_content(prompt).text
+    except Exception as e: return f"Lỗi AI: {e}"
+
+# --- HÀM MỚI: AI PHÂN TÍCH VALUE INVESTING TỪ TAB 3 ---
+def get_ai_value_pick(api_key, top_3_info):
+    if not api_key: return "⚠️ Vui lòng nhập API Key."
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel('gemini-2.5-flash')
+    prompt = f"""Role: Chuyên gia Đầu tư Giá trị (Value Investor) kiểu Warren Buffett.
+    Task: Đây là Top 3 cổ phiếu đang bị định giá thấp nhất theo công thức Graham:
+    {top_3_info}
+    Hãy chọn ra ĐÚNG 1 MÃ xứng đáng mua tích sản nhất.
+    Output: 🏆 **CỔ PHIẾU TÍCH SẢN TỐT NHẤT:** [Tên mã] | 💡 **LÝ DO:** [Phân tích FA] | 🎯 **LƯU Ý RỦI RO:** [Chỉ ra Value Trap nếu có]."""
+    try:
+        with st.spinner('🤖 AI đang soi Báo cáo tài chính & lọc Bẫy giá trị...'): return model.generate_content(prompt).text
+    except Exception as e: return f"Lỗi AI: {e}"
+
 # --- 5. GIAO DIỆN CHÍNH (MAIN) ---
 def main():
     vn_tz = timezone(timedelta(hours=7))
@@ -347,10 +280,6 @@ def main():
     st.markdown(f"<h2 style='text-align: center; color: #1E88E5;'>🚀 Bot Phân Tích Chứng Khoán Hybrid AI 4.0</h2>", unsafe_allow_html=True)
     st.markdown("---")
     
-    # ----------------------------------------------------
-    # BƯỚC QUAN TRỌNG: ĐƯA SIDEBAR RA NGOÀI VÀ LÊN TRÊN CÙNG
-    # ĐỂ APP LẤY ĐƯỢC MÃ CỔ PHIẾU VÀ KHUNG THỜI GIAN TRƯỚC
-    # ----------------------------------------------------
     with st.sidebar:
         st.title("🎛️ Control Panel")
         try: api_key = st.secrets["GEMINI_API_KEY"]
@@ -358,25 +287,15 @@ def main():
             
         symbol = st.text_input("Mã Cổ Phiếu", value="DBC").upper()
         timeframe = st.selectbox("Khung thời gian", ["Ngày", "Tuần"])
-        # -------------------------------------------------------------------------
-        # BỔ SUNG: NÚT CHỌN CHỈ BÁO CHO TẦNG 3
-        # -------------------------------------------------------------------------
         indicator_choice = st.radio("Tầng 3: Chọn chỉ báo dao động", ["RSI", "MACD"], horizontal=True)
-        # -------------------------------------------------------------------------
         
-        # --- THÊM ĐOẠN NÀY ĐỂ TẠO NÚT CẬP NHẬT REAL-TIME ---
         if st.button("🔄 Làm mới dữ liệu (Real-time)", use_container_width=True):
-            st.cache_data.clear() # Xóa bộ nhớ tạm
-            st.rerun()            # Tải lại ngay lập tức
-        # ---------------------------------------------------
-        
+            st.cache_data.clear() 
+            st.rerun()            
         st.info("💡 Mẹo: Chọn 'Tuần' để xem xu hướng dài hạn.")
-        st.success("✨ V2.1: Nâng cấp Real-time & Radar Đa Lớp - Thiết kế và lập trình bởi Hoàng Trung Dũng - Email: dung@hdbn.vip")
 
-    # --- KHỞI TẠO 3 TAB GIAO DIỆN ---
     tab1, tab2, tab3 = st.tabs(["📊 Phân Tích Chuyên Sâu", "🎯 Radar Quét Cổ Phiếu", "💎 Săn Cổ Phiếu Rẻ (Value)"])
     
-    # --- GIAO DIỆN TAB 1 ---
     with tab1:
         if symbol:
             df = load_data(symbol, timeframe)
@@ -385,26 +304,13 @@ def main():
             
             if df is not None and not df.empty:
                 df = calculate_indicators(df)
-                last_row = df.iloc[-1]
-                prev_row = df.iloc[-2]
-                
-                change = last_row['Close'] - prev_row['Close']
-                pct_change = (change / prev_row['Close']) * 100
+                last_row, prev_row = df.iloc[-1], df.iloc[-2]
+                pct_change = ((last_row['Close'] - prev_row['Close']) / prev_row['Close']) * 100
                 
                 lookback = 20 if len(df) >= 20 else len(df) - 1
-                if lookback > 0:
-                    stock_perf = ((last_row['Close'] - df['Close'].iloc[-1 - lookback]) / df['Close'].iloc[-1 - lookback]) * 100
-                else:
-                    stock_perf = 0.0
-
-                if df_vnindex is not None and len(df_vnindex) > lookback:
-                    vnindex_perf = ((df_vnindex['Close'].iloc[-1] - df_vnindex['Close'].iloc[-1 - lookback]) / df_vnindex['Close'].iloc[-1 - lookback]) * 100
-                else:
-                    vnindex_perf = 0.0
-                    
-                if stock_perf > vnindex_perf: rs_status = "KHỎE HƠN 💪"
-                elif stock_perf < vnindex_perf: rs_status = "YẾU HƠN ⚠️"
-                else: rs_status = "TƯƠNG ĐƯƠNG ⚖️"
+                stock_perf = ((last_row['Close'] - df['Close'].iloc[-1 - lookback]) / df['Close'].iloc[-1 - lookback]) * 100 if lookback > 0 else 0.0
+                vnindex_perf = ((df_vnindex['Close'].iloc[-1] - df_vnindex['Close'].iloc[-1 - lookback]) / df_vnindex['Close'].iloc[-1 - lookback]) * 100 if df_vnindex is not None and len(df_vnindex) > lookback else 0.0
+                rs_status = "KHỎE HƠN 💪" if stock_perf > vnindex_perf else "YẾU HƠN ⚠️" if stock_perf < vnindex_perf else "TƯƠNG ĐƯƠNG ⚖️"
                 
                 m1, m2, m3, m4 = st.columns(4)
                 m1.metric("Giá hiện tại", f"{last_row['Close']:,.2f}", f"{pct_change:.2f}%")
@@ -413,328 +319,156 @@ def main():
                 m4.metric("MA20 Trend", "Tăng" if last_row['Close'] > last_row['MA20'] else "Giảm")
                 
                 st.divider()
-
                 col_left, col_right = st.columns([2, 1])
                 
                 with col_left:
-                    st.info(f"📈 **Đo lường RS (20 phiên):** Mã **{symbol}** thay đổi **{stock_perf:.2f}%** | VN-Index thay đổi **{vnindex_perf:.2f}%** ➔ Cổ phiếu đang **{rs_status}**")
-                    
+                    st.info(f"📈 **Đo lường RS (20 phiên):** Mã **{symbol}** thay đổi **{stock_perf:.2f}%** | VN-Index: **{vnindex_perf:.2f}%** ➔ Cổ phiếu đang **{rs_status}**")
                     st.subheader(f"📊 Biểu đồ {symbol} ({timeframe})")
-                    # SỬA LẠI DÒNG NÀY: Truyền thêm indicator_choice vào hàm
                     fig = plot_chart(df, symbol, indicator_choice) 
                     st.plotly_chart(fig, use_container_width=True)
 
                 with col_right:
                     st.subheader("📋 Chỉ số Kỹ thuật (TA)")
-                    tech_data = {
-                        "Chỉ số": ["MA20", "MA50", "BB Upper", "BB Lower"],
-                        "Giá trị": [f"{last_row['MA20']:,.2f}", f"{last_row['MA50']:,.2f}", f"{last_row['BB_Upper']:,.2f}", f"{last_row['BB_Lower']:,.2f}"]
-                    }
-                    st.table(pd.DataFrame(tech_data))
+                    st.table(pd.DataFrame({"Chỉ số": ["MA20", "MA50", "BB Upper", "BB Lower"], "Giá trị": [f"{last_row['MA20']:,.2f}", f"{last_row['MA50']:,.2f}", f"{last_row['BB_Upper']:,.2f}", f"{last_row['BB_Lower']:,.2f}"]}))
                     
                     st.subheader("🏢 Chỉ số Cơ bản & Sức khỏe")
+                    debt_display, pe_display, roe_display = fa_data['debt_to_equity'], fa_data['pe'], fa_data['roe']
                     
-                    # 1. HỆ THỐNG CẢNH BÁO RỦI RO NỢ (DEBT TO EQUITY)
-                    debt_str = fa_data['debt_to_equity']
-                    debt_display = debt_str
-                    if debt_str != "N/A":
-                        try:
-                            debt_val = float(debt_str.replace('%', '').strip())
-                            if debt_val < 100: debt_display = f"{debt_str} 🟢 (An toàn)"
-                            elif debt_val <= 200: debt_display = f"{debt_str} 🟡 (Lưu ý)"
-                            else: debt_display = f"{debt_str} 🔴 (Rủi ro cao)"
-                        except: pass
+                    try:
+                        d_val = float(fa_data['debt_to_equity'].replace('%', '').strip())
+                        debt_display += " 🟢" if d_val < 100 else " 🟡" if d_val <= 200 else " 🔴"
+                    except: pass
+                    try:
+                        p_val = float(fa_data['pe'])
+                        pe_display += " 🟢" if p_val < 10 else " 🟡" if p_val <= 20 else " 🔴"
+                    except: pass
+                    try:
+                        r_val = float(fa_data['roe'].replace('%', '').strip())
+                        roe_display += " 🟢" if r_val > 15 else " 🟡" if r_val >= 10 else " 🔴"
+                    except: pass
 
-                    # 2. HỆ THỐNG CHẤM ĐIỂM ĐỊNH GIÁ P/E
-                    pe_str = fa_data['pe']
-                    pe_display = pe_str
-                    if pe_str != "N/A":
-                        try:
-                            pe_val = float(pe_str)
-                            if pe_val < 10: pe_display = f"{pe_str} 🟢 (Rẻ)"
-                            elif pe_val <= 20: pe_display = f"{pe_str} 🟡 (Hợp lý)"
-                            else: pe_display = f"{pe_str} 🔴 (Đắt)"
-                        except: pass
-
-                    # 3. HỆ THỐNG CHẤM ĐIỂM HIỆU QUẢ SINH LỜI ROE
-                    roe_str = fa_data['roe']
-                    roe_display = roe_str
-                    if roe_str != "N/A":
-                        try:
-                            # Lọc bỏ dấu % nếu có để lấy giá trị số học
-                            roe_val = float(roe_str.replace('%', '').strip())
-                            if roe_val > 15: roe_display = f"{roe_str} 🟢 (Tốt)"
-                            elif roe_val >= 10: roe_display = f"{roe_str} 🟡 (Bình thường)"
-                            else: roe_display = f"{roe_str} 🔴 (Kém)"
-                        except: pass
-
-                    # Đưa toàn bộ các biến display mới vào bảng
-                    fa_df = {
-                        "Chỉ số": ["Vốn hóa thị trường", "Tỷ lệ Nợ / Vốn CSH", "Tỷ suất Cổ tức", "P/E", "P/B", "ROE (%)"],
+                    st.table(pd.DataFrame({
+                        "Chỉ số": ["Vốn hóa thị trường", "Tỷ lệ Nợ / Vốn", "Tỷ suất Cổ tức", "P/E", "P/B", "ROE (%)"],
                         "Giá trị": [fa_data['market_cap'], debt_display, fa_data['div_yield'], pe_display, fa_data['pb'], roe_display]
-                    }
-                    st.table(pd.DataFrame(fa_df))                   
+                    }))                   
                     
-                    status_ma20 = "nằm trên" if last_row['Close'] > last_row['MA20'] else "nằm dưới"
-                    if last_row['Close'] >= last_row['BB_Upper']: bb_status = "Chạm/Vượt Band trên (Quá mua)"
-                    elif last_row['Close'] <= last_row['BB_Lower']: bb_status = "Chạm/Thủng Band dưới (Quá bán)"
-                    else: bb_status = "Dao động bình thường"
-                    
-                    avg_vol = df['Volume'].tail(10).mean()
-                    vol_today = last_row['Volume']
-                    
-                    st.subheader("🤖 AI Khuyến Nghị V4.0")
-                    
-                    if 'ai_analysis' not in st.session_state:
-                        st.session_state.ai_analysis = ""
-                    if 'analyzed_symbol' not in st.session_state:
-                        st.session_state.analyzed_symbol = ""
-
                     if api_key:
                         if st.button("Phân tích chuyên sâu", use_container_width=True):
-                            analysis = get_ai_analysis(
-                                api_key=api_key, symbol=symbol, current_price=last_row['Close'], 
-                                rsi=last_row['RSI'], ma20=last_row['MA20'], status_ma20=status_ma20, 
-                                bb_status=bb_status, avg_vol=avg_vol, vol_today=vol_today,
-                                stock_perf=stock_perf, vnindex_perf=vnindex_perf, rs_status=rs_status.split()[0],
-                                pe=fa_data['pe'], pb=fa_data['pb'], roe=fa_data['roe'],
-                                market_cap=fa_data['market_cap'], div_yield=fa_data['div_yield'], debt_to_equity=fa_data['debt_to_equity'],
-                                # --- BỔ SUNG TRUYỀN DỮ LIỆU ĐỘNG CHO AI ---
-                                indicator_choice=indicator_choice,
-                                macd=last_row['MACD'], macd_signal=last_row['MACD_Signal'], macd_hist=last_row['MACD_Hist']
-                            )
-                            st.session_state.ai_analysis = analysis
-                            st.session_state.analyzed_symbol = symbol
+                            status_ma20 = "nằm trên" if last_row['Close'] > last_row['MA20'] else "nằm dưới"
+                            bb_status = "Quá mua" if last_row['Close'] >= last_row['BB_Upper'] else "Quá bán" if last_row['Close'] <= last_row['BB_Lower'] else "Bình thường"
+                            analysis = get_ai_analysis(api_key, symbol, last_row['Close'], last_row['RSI'], last_row['MA20'], status_ma20, bb_status, df['Volume'].tail(10).mean(), last_row['Volume'], stock_perf, vnindex_perf, rs_status.split()[0], fa_data['pe'], fa_data['pb'], fa_data['roe'], fa_data['market_cap'], fa_data['div_yield'], fa_data['debt_to_equity'], indicator_choice, last_row['MACD'], last_row['MACD_Signal'], last_row['MACD_Hist'])
+                            st.session_state.ai_analysis, st.session_state.analyzed_symbol = analysis, symbol
 
-                        if st.session_state.ai_analysis and st.session_state.analyzed_symbol == symbol:
+                        if st.session_state.get('ai_analysis') and st.session_state.get('analyzed_symbol') == symbol:
                             st.markdown(st.session_state.ai_analysis)
-                            
-                            st.divider()
-                            
-                            report_content = f"BÁO CÁO PHÂN TÍCH MÃ {symbol}\n"
-                            report_content += f"Ngày phân tích: {current_time}\n"
-                            report_content += "-"*40 + "\n"
-                            if indicator_choice == "RSI":
-                                report_content += f"[Kỹ thuật] Giá: {last_row['Close']:,.2f} | RSI: {last_row['RSI']:.2f} | Khối lượng: {vol_today:,.0f}\n"
-                            else:
-                                report_content += f"[Kỹ thuật] Giá: {last_row['Close']:,.2f} | MACD: {last_row['MACD']:.3f} | Khối lượng: {vol_today:,.0f}\n"
-                            report_content += f"[Cơ bản] Vốn hóa: {fa_data['market_cap']} | P/E: {fa_data['pe']} | P/B: {fa_data['pb']} | ROE: {fa_data['roe']}%\n"
-                            report_content += f"[Độ An Toàn] Tỷ suất cổ tức: {fa_data['div_yield']} | Nợ/Vốn CSH: {fa_data['debt_to_equity']}\n"
-                            report_content += f"[Sức mạnh Giá] {symbol} thay đổi {stock_perf:.2f}% vs VN-Index {vnindex_perf:.2f}%\n"
-                            report_content += "-"*40 + "\n\n"
-                            report_content += st.session_state.ai_analysis
-                            
-                            st.download_button(
-                                label="📥 Tải Báo Cáo Nhận Định (TXT)",
-                                data=report_content,
-                                file_name=f"Bao_cao_AI_RiskControl_{symbol}_{date.today()}.txt",
-                                mime="text/plain",
-                                use_container_width=True
-                            )
                     else:
-                        st.warning("Hệ thống chưa thiết lập API Key. Vui lòng kiểm tra lại cài đặt Secrets trên Streamlit.")
-            
-                st.markdown("---")
-                st.caption(f"🕒 *Dữ liệu được cập nhật lần cuối vào lúc: **{current_time}** (Múi giờ Việt Nam)*")                
+                        st.warning("Vui lòng thiết lập API Key trong thư mục Secrets.")
             else:
-                st.error(f"Không tìm thấy dữ liệu cho mã {symbol}. Vui lòng kiểm tra lại mã cổ phiếu.")
+                st.error("Không tìm thấy dữ liệu.")
 
-    # --- GIAO DIỆN TAB 2 ---
     with tab2:
         st.subheader("📡 Radar Quét Đa Chiều (TA + FA)")
-        st.markdown("Bộ lọc hội tụ: Tìm kiếm các mã đang có dòng tiền vào (TA) và nền tảng kinh doanh sinh lời tốt (FA).")
+        tickers_input = st.text_input("Nhập danh sách mã:", "SSI, VND, HPG, HSG, NVL, SHS, MSB, VIX, CII, EVF, DBC, VNM, DXG, DIG, PDR, PVD")
         
-        default_tickers = "SSI, VND, HPG, HSG, NVL, SHS, MSB, VIX, CII, EVF, DBC, VNM, DXG, DIG, PDR, PVD"
-        tickers_input = st.text_input("Nhập danh sách mã cần quét (cách nhau bằng dấu phẩy):", default_tickers)
-        
-        # SỬ DỤNG SESSION_STATE: Để lưu lại kết quả quét, tránh bị mất bảng khi bấm nút AI
-        if 'radar_results' not in st.session_state: st.session_state.radar_results = []
-        if 'has_run_radar' not in st.session_state: st.session_state.has_run_radar = False
-        if 'radar_ai_pick' not in st.session_state: st.session_state.radar_ai_pick = ""
-        
-        # BỘ LỌC 3 CỘT
-        col_f1, col_f2, col_f3 = st.columns(3)
-        with col_f1:
-            filter_rsi = st.selectbox("🎯 Điều kiện RSI (Kỹ thuật):", [
-                "Không lọc", 
-                "RSI < 30 (Vùng Quá bán - Bắt đáy)", 
-                "RSI > 50 (Xu hướng Tích cực)", 
-                "RSI > 70 (Vùng Quá mua)"
-            ])
-        with col_f2:
-            filter_ma20 = st.selectbox("📈 Điều kiện MA20 (Xu hướng):", [
-                "Không lọc", 
-                "Giá vừa cắt lên MA20 (Điểm mua sớm)", 
-                "Giá nằm trên MA20 (Đang Uptrend)"
-            ])
-        with col_f3:
-            filter_roe = st.selectbox("🏢 Điều kiện ROE (Cơ bản):", [
-                "Không lọc", 
-                "ROE > 10% (Hoạt động Tốt)", 
-                "ROE > 15% (Sinh lời Rất Tốt)",
-                "ROE > 20% (Doanh nghiệp Xuất sắc)"
-            ])
+        col1, col2, col3 = st.columns(3)
+        with col1: f_rsi = st.selectbox("🎯 Điều kiện RSI:", ["Không lọc", "RSI < 30 (Bắt đáy)", "RSI > 50 (Tích cực)", "RSI > 70 (Quá mua)"])
+        with col2: f_ma = st.selectbox("📈 Điều kiện MA20:", ["Không lọc", "Giá cắt lên MA20", "Nằm trên MA20"])
+        with col3: f_roe = st.selectbox("🏢 Điều kiện ROE:", ["Không lọc", "ROE > 10%", "ROE > 15%", "ROE > 20%"])
 
-        if st.button("🚀 Kích Hoạt Radar Lọc Cổ Phiếu", use_container_width=True):
-            # Xóa dữ liệu cũ mỗi lần quét mới
-            st.session_state.radar_results = []
-            st.session_state.radar_ai_pick = ""
-            st.session_state.has_run_radar = True
-            
+        if st.button("🚀 Kích Hoạt Radar", use_container_width=True):
+            st.session_state.radar_results, st.session_state.radar_ai_pick = [], ""
             tickers = [x.strip().upper() for x in tickers_input.split(",") if x.strip()]
-            temp_results = []
-            
-            my_bar = st.progress(0, text="Radar đang quét dữ liệu thị trường...")
+            bar = st.progress(0)
             
             for i, t in enumerate(tickers):
-                my_bar.progress((i + 1) / len(tickers), text=f"Đang phân tích tín hiệu & định giá mã {t}...")
-                
-                df_scan = load_data(t, "Ngày") 
-                if df_scan is not None and len(df_scan) > 2:
-                    df_scan = calculate_indicators(df_scan)
-                    fa_data = load_fundamental_data(t) # Kéo tự động P/E, ROE
-                    
-                    last_row_scan = df_scan.iloc[-1]
-                    prev_row_scan = df_scan.iloc[-2]
+                bar.progress((i + 1) / len(tickers), text=f"Đang phân tích {t}...")
+                df_s = load_data(t, "Ngày")
+                if df_s is not None and len(df_s) > 2:
+                    df_s = calculate_indicators(df_s)
+                    fa = load_fundamental_data(t)
+                    lr, pr = df_s.iloc[-1], df_s.iloc[-2]
                     
                     passed = True
+                    if "RSI < 30" in f_rsi and lr['RSI'] >= 30: passed = False
+                    elif "RSI > 50" in f_rsi and lr['RSI'] <= 50: passed = False
+                    elif "RSI > 70" in f_rsi and lr['RSI'] <= 70: passed = False
                     
-                    # 1. Lọc Kỹ thuật (TA)
-                    if filter_rsi == "RSI < 30 (Vùng Quá bán - Bắt đáy)" and last_row_scan['RSI'] >= 30: passed = False
-                    elif filter_rsi == "RSI > 50 (Xu hướng Tích cực)" and last_row_scan['RSI'] <= 50: passed = False
-                    elif filter_rsi == "RSI > 70 (Vùng Quá mua)" and last_row_scan['RSI'] <= 70: passed = False
+                    if "cắt lên" in f_ma and not (pr['Close'] < pr['MA20'] and lr['Close'] > lr['MA20']): passed = False
+                    elif "Nằm trên" in f_ma and lr['Close'] < lr['MA20']: passed = False
                     
-                    if filter_ma20 == "Giá vừa cắt lên MA20 (Điểm mua sớm)":
-                        if not (prev_row_scan['Close'] < prev_row_scan['MA20'] and last_row_scan['Close'] > last_row_scan['MA20']): passed = False
-                    elif filter_ma20 == "Giá nằm trên MA20 (Đang Uptrend)":
-                        if last_row_scan['Close'] < last_row_scan['MA20']: passed = False
-                            
-                    # 2. Lọc Cơ bản (FA - ROE)
-                    roe_str = fa_data['roe']
-                    roe_val = 0.0
-                    if roe_str != "N/A":
-                        try: roe_val = float(roe_str)
-                        except: pass
-                    else:
-                        if filter_roe != "Không lọc": passed = False # Bỏ qua mã thiếu dữ liệu ROE
-                        
-                    if filter_roe == "ROE > 10% (Hoạt động Tốt)" and roe_val <= 10: passed = False
-                    elif filter_roe == "ROE > 15% (Sinh lời Rất Tốt)" and roe_val <= 15: passed = False
-                    elif filter_roe == "ROE > 20% (Doanh nghiệp Xuất sắc)" and roe_val <= 20: passed = False
+                    roe_val = float(fa['roe'].replace('%','')) if fa['roe'] != "N/A" else 0
+                    if "Không lọc" not in f_roe and fa['roe'] == "N/A": passed = False
+                    if "ROE > 10%" in f_roe and roe_val <= 10: passed = False
+                    elif "ROE > 15%" in f_roe and roe_val <= 15: passed = False
+                    elif "ROE > 20%" in f_roe and roe_val <= 20: passed = False
                     
-                    if passed:
-                        temp_results.append({
-                            "Mã CP": t,
-                            "Giá Đóng Cửa": f"{last_row_scan['Close']:,.2f}",
-                            "RSI": round(last_row_scan['RSI'], 2),
-                            "MA20": f"{last_row_scan['MA20']:,.2f}",
-                            "Khối Lượng": f"{last_row_scan['Volume']:,.0f}",
-                            "ROE (%)": roe_str,
-                            "P/E": fa_data['pe']
-                        })
-                        
-            my_bar.empty() 
-            st.session_state.radar_results = temp_results
+                    if passed: st.session_state.radar_results.append({"Mã CP": t, "Giá Đóng Cửa": f"{lr['Close']:,.2f}", "RSI": round(lr['RSI'], 2), "MA20": f"{lr['MA20']:,.2f}", "Khối Lượng": f"{lr['Volume']:,.0f}", "ROE (%)": fa['roe'], "P/E": fa['pe']})
+            bar.empty()
+            st.session_state.has_run_radar = True
 
-        # 3. HIỂN THỊ KẾT QUẢ VÀ NÚT CHỌN LỌC AI
-        if st.session_state.has_run_radar:
+        if st.session_state.get('has_run_radar'):
             if st.session_state.radar_results:
-                st.success(f"🎉 Rà soát hoàn tất! Có {len(st.session_state.radar_results)} mã lọt qua bộ lọc khắt khe của anh.")
-                st.dataframe(pd.DataFrame(st.session_state.radar_results), use_container_width=True, hide_index=True)
-                
-                # --- NÚT HIỆN HỮU KHI CÓ NHIỀU HƠN 1 MÃ ---
-                if len(st.session_state.radar_results) > 1:
-                    st.markdown("---")
-                    st.subheader("🤖 Giám Đốc Đầu Tư AI: Chọn Lọc Tinh Hoa")
-                    if st.button("🏆 Nhờ AI chấm điểm & Chọn ra 1 mã an toàn nhất", use_container_width=True):
-                        pick_result = get_ai_best_pick(api_key, st.session_state.radar_results)
-                        st.session_state.radar_ai_pick = pick_result
-                        
-                if st.session_state.radar_ai_pick:
-                    st.info(st.session_state.radar_ai_pick)
-            else:
-                st.warning("Khung thị trường hiện tại không có mã nào thỏa mãn toàn bộ các điều kiện này.")
-    # --- GIAO DIỆN TAB 3: ĐỊNH GIÁ THẤP (VALUE INVESTING) ---
+                st.dataframe(pd.DataFrame(st.session_state.radar_results), use_container_width=True)
+                if len(st.session_state.radar_results) > 1 and st.button("🏆 Nhờ AI chấm điểm", use_container_width=True):
+                    st.session_state.radar_ai_pick = get_ai_best_pick(api_key, st.session_state.radar_results)
+                if st.session_state.radar_ai_pick: st.info(st.session_state.radar_ai_pick)
+            else: st.warning("Không có mã nào thỏa mãn điều kiện.")
+
     with tab3:
         st.subheader("⚖️ Bảng Xếp Hạng Định Giá Cổ Phiếu (Fair Value)")
-        st.markdown("Mô phỏng tính năng **Định giá thấp nhất** dựa trên công thức Giá trị hợp lý của Benjamin Graham kết hợp Sức khỏe tài chính.")
-        
         val_tickers_input = st.text_input("Nhập danh sách mã để chấm điểm định giá:", "HPG, SSI, VND, DBC, VNM, TCB, MBB, FPT, MWG, REE, VCB", key="val_input")
         
         if st.button("🔍 Quét Định Giá & Tiềm Năng", use_container_width=True):
             val_tickers = [x.strip().upper() for x in val_tickers_input.split(",") if x.strip()]
             val_results = []
-            
-            progress_bar = st.progress(0, text="Đang thu thập báo cáo tài chính và tính toán Fair Value...")
+            pb = st.progress(0)
             
             for i, t in enumerate(val_tickers):
-                progress_bar.progress((i + 1) / len(val_tickers), text=f"Đang định giá mã {t}...")
-                
-                # Lấy dữ liệu
+                pb.progress((i + 1) / len(val_tickers), text=f"Đang định giá mã {t}...")
                 val_data = get_valuation_metrics(t)
                 fa_data = load_fundamental_data(t)
                 
                 if val_data['fair_value'] > 0:
-                    # Chấm điểm Sức khỏe tài chính cơ bản (Dựa trên ROE và Nợ)
-                    health_score = "Bình thường"
-                    roe_val = 0
-                    if fa_data['roe'] != "N/A":
-                        try: roe_val = float(fa_data['roe'].replace('%', ''))
-                        except: pass
+                    roe_val = float(fa_data['roe'].replace('%', '')) if fa_data['roe'] != "N/A" else 0
+                    debt_val = float(fa_data['debt_to_equity'].replace('%', '')) if fa_data['debt_to_equity'] != "N/A" else 999
+                    h_score = "Xuất sắc 🌟" if roe_val > 15 and debt_val < 100 else "Tốt ✅" if roe_val > 10 and debt_val < 200 else "Yếu ⚠️"
                     
-                    debt_val = 999
-                    if fa_data['debt_to_equity'] != "N/A":
-                        try: debt_val = float(fa_data['debt_to_equity'].replace('%', ''))
-                        except: pass
-                        
-                    if roe_val > 15 and debt_val < 100: health_score = "Xuất sắc 🌟"
-                    elif roe_val > 10 and debt_val < 200: health_score = "Tốt ✅"
-                    elif roe_val < 5 or debt_val > 200: health_score = "Yếu ⚠️"
-
-                    # Chấm điểm P/E
-                    pe_rating = "Hợp lý"
-                    if fa_data['pe'] != "N/A":
-                        try:
-                            pe_val = float(fa_data['pe'])
-                            if pe_val < 10: pe_rating = "Rất Rẻ 🟢"
-                            elif pe_val > 20: pe_rating = "Đắt 🔴"
-                        except: pass
+                    pe_val = float(fa_data['pe']) if fa_data['pe'] != "N/A" else 15
+                    pe_rating = "Rất Rẻ 🟢" if pe_val < 10 else "Đắt 🔴" if pe_val > 20 else "Hợp lý"
 
                     val_results.append({
-                        "Mã CP": t,
-                        "Giá HT": val_data['price'],
-                        "Giá trị Hợp lý": val_data['fair_value'],
-                        "Tăng lên (%)": val_data['upside'],
-                        "Sức Khỏe TC": health_score,
-                        "Định giá P/E": pe_rating,
-                        "Tỉ số P/E": fa_data['pe'],
-                        "ROE (%)": fa_data['roe'],
-                        "Vốn hóa": fa_data['market_cap']
+                        "Mã CP": t, "Giá HT": val_data['price'], "Giá trị Hợp lý": val_data['fair_value'],
+                        "Tăng lên (%)": val_data['upside'], "Sức Khỏe TC": h_score, "Định giá P/E": pe_rating,
+                        "Tỉ số P/E": fa_data['pe'], "ROE (%)": fa_data['roe']
                     })
-            
-            progress_bar.empty()
+            pb.empty()
             
             if val_results:
-                # Sắp xếp theo Tiềm năng tăng giá (Upside) từ cao xuống thấp
-                df_val = pd.DataFrame(val_results)
-                df_val = df_val.sort_values(by="Tăng lên (%)", ascending=False).reset_index(drop=True)
+                df_val = pd.DataFrame(val_results).sort_values(by="Tăng lên (%)", ascending=False).reset_index(drop=True)
+                st.session_state.top_3_value = df_val.head(3) # Lưu top 3 cho AI
                 
-                # Format lại số liệu cho đẹp
-                df_val['Giá HT'] = df_val['Giá HT'].apply(lambda x: f"{x:,.0f}")
-                df_val['Giá trị Hợp lý'] = df_val['Giá trị Hợp lý'].apply(lambda x: f"{x:,.0f}")
+                df_display = df_val.copy()
+                df_display['Giá HT'] = df_display['Giá HT'].apply(lambda x: f"{x:,.0f}")
+                df_display['Giá trị Hợp lý'] = df_display['Giá trị Hợp lý'].apply(lambda x: f"{x:,.0f}")
                 
-                # Định dạng màu cho cột Tăng lên (%) giống Investing.com
-                def color_upside(val):
-                    if val > 20: return 'color: #00FF00; font-weight: bold' # Xanh rực rỡ nếu upside > 20%
-                    elif val > 0: return 'color: #26a69a'                   # Xanh nhẹ nếu có upside
-                    return 'color: #ef5350'                                 # Đỏ nếu đang bị định giá cao hơn giá trị thực
+                def color_upside(val): return 'color: #00FF00; font-weight: bold' if val > 20 else 'color: #26a69a' if val > 0 else 'color: #ef5350'
                 
-                # Áp dụng styling cho DataFrame
-                styled_df = df_val.style.map(color_upside, subset=['Tăng lên (%)']).format({"Tăng lên (%)": "{:+.2f}%"})
-                
-                st.success("Tạo bảng định giá hoàn tất! Các mã xếp trên cùng là các mã đang có biên an toàn lớn nhất.")
+                styled_df = df_display.style.map(color_upside, subset=['Tăng lên (%)']).format({"Tăng lên (%)": "{:+.2f}%"})
                 st.dataframe(styled_df, use_container_width=True, hide_index=True)
             else:
-                st.warning("Không có dữ liệu định giá (EPS, BVPS) cho các mã này hoặc các mã đều đang làm ăn thua lỗ (EPS âm).")
+                st.warning("Không có dữ liệu hợp lệ (Lưu ý: Các mã thua lỗ EPS âm sẽ bị loại bỏ khỏi bảng).")
+
+        # NÚT GỌI AI PHÂN TÍCH VALUE ĐƯỢC CHUYỂN RA NGOÀI ĐỂ KHÔNG BỊ MẤT KHI RERUN
+        if st.session_state.get('top_3_value') is not None:
+            st.markdown("---")
+            st.subheader("🤖 Giám Đốc AI: Tích Sản Đầu Tư Giá Trị")
+            if st.button("🏆 Nhờ AI phân tích Top 3 mã định giá thấp nhất", use_container_width=True):
+                top_3_str = ""
+                for _, row in st.session_state.top_3_value.iterrows():
+                    top_3_str += f"- {row['Mã CP']}: Upside {row['Tăng lên (%)']:.1f}%, P/E {row['Tỉ số P/E']}, ROE {row['ROE (%)']}, {row['Sức Khỏe TC']}\n"
+                
+                ai_value_result = get_ai_value_pick(api_key, top_3_str)
+                st.info(ai_value_result)
+
 if __name__ == "__main__":
     main()
