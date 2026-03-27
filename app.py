@@ -170,6 +170,28 @@ def plot_chart(df, symbol):
     # Thêm các đường MA vào Tầng 1
     fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['MA20'], line=dict(color='yellow', width=1.5), name='MA20'), row=1, col=1)
     fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['MA50'], line=dict(color='purple', width=1.5), name='MA50'), row=1, col=1)
+    # -------------------------------------------------------------------------
+    # BỔ SUNG: VẼ DẢI BOLLINGER BANDS VÀ TÔ MỜ Ở GIỮA (SHADED REGION)
+    # -------------------------------------------------------------------------
+    # 1. Vẽ đường BB Lower trước (không tô màu)
+    fig.add_trace(go.Scatter(
+        x=plot_df.index, 
+        y=plot_df['BB_Lower'], 
+        line=dict(color='rgba(33, 150, 243, 0.3)', width=1), # Màu xanh dương nhạt, nét mảnh
+        name='BB Lower',
+        showlegend=False # Ẩn chú thích để gọn legend
+    ), row=1, col=1)
+
+    # 2. Vẽ đường BB Upper sau và tô mờ xuống đường BB Lower
+    fig.add_trace(go.Scatter(
+        x=plot_df.index, 
+        y=plot_df['BB_Upper'], 
+        fill='tonexty',                                      # Lệnh quan trọng: Tô màu lấp đầy xuống dải dưới
+        fillcolor='rgba(33, 150, 243, 0.08)',                # Màu nền dải BB (độ trong suốt 8% để không che lấp nến)
+        line=dict(color='rgba(33, 150, 243, 0.3)', width=1), 
+        name='Bollinger Bands'
+    ), row=1, col=1)
+    # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
     # BỔ SUNG: THÊM ĐƯỜNG KẺ NGANG ĐỨT NÉT THỂ HIỆN GIÁ HIỆN TẠI
