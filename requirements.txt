@@ -1,6 +1,6 @@
 streamlit
 pandas
-vnstock==3.4.2
+vnstock>=3.5.0
 ta
 plotly
 google-generativeai
