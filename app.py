@@ -4,7 +4,7 @@ import ta
 import plotly.graph_objects as go
 from vnstock import Vnstock
 from datetime import date, timedelta, datetime, timezone
-import google.generativeai as genai
+from google import genai  # <-- ĐÃ CẬP NHẬT CHUẨN MỚI CỦA GOOGLE
 import requests
 import yfinance as yf
 from plotly.subplots import make_subplots
@@ -227,12 +227,11 @@ def plot_chart(df, symbol, indicator_choice="RSI"):
     fig.update_xaxes(rangeslider_visible=False)
     return fig
 
-# --- 4. HÀM GỌI AI PHÂN TÍCH ---
+# --- 4. HÀM GỌI AI PHÂN TÍCH (ĐÃ CẬP NHẬT CHUẨN MỚI CỦA GOOGLE) ---
 def get_ai_analysis(api_key, symbol, current_price, rsi, ma20, status_ma20, bb_status, avg_vol, vol_today, stock_perf, vnindex_perf, rs_status, pe, pb, roe, market_cap, div_yield, debt_to_equity, indicator_choice, macd, macd_signal, macd_hist):
     if not api_key: return "⚠️ Vui lòng nhập API Key để xem phân tích."
     
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-2.5-flash')
+    client = genai.Client(api_key=api_key)
     
     if indicator_choice == "RSI": momentum_prompt = f"- RSI(14): {rsi:.2f} (Hãy đánh giá xem đang ở vùng quá mua, quá bán hay tích lũy)"
     else:
@@ -245,31 +244,31 @@ def get_ai_analysis(api_key, symbol, current_price, rsi, ma20, status_ma20, bb_s
 Output: 📊 TỔNG QUAN | 🎯 KHUYẾN NGHỊ (Vùng mua, Target, Stoploss) | 💡 LÝ DO."""
     try:
         with st.spinner(f'🤖 AI đang đọc biểu đồ {indicator_choice}...'):
-            return model.generate_content(prompt).text
+            return client.models.generate_content(model='gemini-2.5-flash', contents=prompt).text
     except Exception as e: return f"Lỗi AI: {e}"
 
 def get_ai_best_pick(api_key, results_list):
     if not api_key: return "⚠️ Vui lòng nhập API Key."
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-2.5-flash')
+    client = genai.Client(api_key=api_key)
     stocks_info = "\n".join([f"- {r['Mã CP']}: Giá {r['Giá Đóng Cửa']}, RSI {r['RSI']}, MA20 {r['MA20']}, ROE {r['ROE (%)']}%, P/E {r['P/E']}" for r in results_list])
     prompt = f"Role: CIO quỹ phòng hộ. Chọn 1 mã tốt nhất từ danh sách:\n{stocks_info}\nOutput: 🏆 MÃ CHỌN | 💡 LÝ DO | 🎯 KẾ HOẠCH HÀNH ĐỘNG."
     try:
-        with st.spinner('🤖 AI đang chấm điểm...'): return model.generate_content(prompt).text
+        with st.spinner('🤖 AI đang chấm điểm...'): 
+            return client.models.generate_content(model='gemini-2.5-flash', contents=prompt).text
     except Exception as e: return f"Lỗi AI: {e}"
 
 # --- HÀM MỚI: AI PHÂN TÍCH VALUE INVESTING TỪ TAB 3 ---
 def get_ai_value_pick(api_key, top_3_info):
     if not api_key: return "⚠️ Vui lòng nhập API Key."
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-2.5-flash')
+    client = genai.Client(api_key=api_key)
     prompt = f"""Role: Chuyên gia Đầu tư Giá trị (Value Investor) kiểu Warren Buffett.
     Task: Đây là Top 3 cổ phiếu đang bị định giá thấp nhất theo công thức Graham:
     {top_3_info}
     Hãy chọn ra ĐÚNG 1 MÃ xứng đáng mua tích sản nhất.
     Output: 🏆 **CỔ PHIẾU TÍCH SẢN TỐT NHẤT:** [Tên mã] | 💡 **LÝ DO:** [Phân tích FA] | 🎯 **LƯU Ý RỦI RO:** [Chỉ ra Value Trap nếu có]."""
     try:
-        with st.spinner('🤖 AI đang soi Báo cáo tài chính & lọc Bẫy giá trị...'): return model.generate_content(prompt).text
+        with st.spinner('🤖 AI đang soi Báo cáo tài chính & lọc Bẫy giá trị...'): 
+            return client.models.generate_content(model='gemini-2.5-flash', contents=prompt).text
     except Exception as e: return f"Lỗi AI: {e}"
 
 # --- 5. GIAO DIỆN CHÍNH (MAIN) ---
@@ -289,7 +288,8 @@ def main():
         timeframe = st.selectbox("Khung thời gian", ["Ngày", "Tuần"])
         indicator_choice = st.radio("Tầng 3: Chọn chỉ báo dao động", ["RSI", "MACD"], horizontal=True)
         
-        if st.button("🔄 Làm mới dữ liệu (Real-time)", use_container_width=True):
+        # --- ĐÃ SỬA width="stretch" ---
+        if st.button("🔄 Làm mới dữ liệu (Real-time)", width="stretch"):
             st.cache_data.clear() 
             st.rerun()            
         st.info("💡 Mẹo: Chọn 'Tuần' để xem xu hướng dài hạn.")
@@ -354,7 +354,8 @@ def main():
                     }))                   
                     
                     if api_key:
-                        if st.button("Phân tích chuyên sâu", use_container_width=True):
+                        # --- ĐÃ SỬA width="stretch" ---
+                        if st.button("Phân tích chuyên sâu", width="stretch"):
                             status_ma20 = "nằm trên" if last_row['Close'] > last_row['MA20'] else "nằm dưới"
                             bb_status = "Quá mua" if last_row['Close'] >= last_row['BB_Upper'] else "Quá bán" if last_row['Close'] <= last_row['BB_Lower'] else "Bình thường"
                             analysis = get_ai_analysis(api_key, symbol, last_row['Close'], last_row['RSI'], last_row['MA20'], status_ma20, bb_status, df['Volume'].tail(10).mean(), last_row['Volume'], stock_perf, vnindex_perf, rs_status.split()[0], fa_data['pe'], fa_data['pb'], fa_data['roe'], fa_data['market_cap'], fa_data['div_yield'], fa_data['debt_to_equity'], indicator_choice, last_row['MACD'], last_row['MACD_Signal'], last_row['MACD_Hist'])
@@ -376,7 +377,8 @@ def main():
         with col2: f_ma = st.selectbox("📈 Điều kiện MA20:", ["Không lọc", "Giá cắt lên MA20", "Nằm trên MA20"])
         with col3: f_roe = st.selectbox("🏢 Điều kiện ROE:", ["Không lọc", "ROE > 10%", "ROE > 15%", "ROE > 20%"])
 
-        if st.button("🚀 Kích Hoạt Radar", use_container_width=True):
+        # --- ĐÃ SỬA width="stretch" ---
+        if st.button("🚀 Kích Hoạt Radar", width="stretch"):
             st.session_state.radar_results, st.session_state.radar_ai_pick = [], ""
             tickers = [x.strip().upper() for x in tickers_input.split(",") if x.strip()]
             bar = st.progress(0)
@@ -410,7 +412,8 @@ def main():
         if st.session_state.get('has_run_radar'):
             if st.session_state.radar_results:
                 st.dataframe(pd.DataFrame(st.session_state.radar_results), use_container_width=True)
-                if len(st.session_state.radar_results) > 1 and st.button("🏆 Nhờ AI chấm điểm", use_container_width=True):
+                # --- ĐÃ SỬA width="stretch" ---
+                if len(st.session_state.radar_results) > 1 and st.button("🏆 Nhờ AI chấm điểm", width="stretch"):
                     st.session_state.radar_ai_pick = get_ai_best_pick(api_key, st.session_state.radar_results)
                 if st.session_state.radar_ai_pick: st.info(st.session_state.radar_ai_pick)
             else: st.warning("Không có mã nào thỏa mãn điều kiện.")
@@ -419,7 +422,8 @@ def main():
         st.subheader("⚖️ Bảng Xếp Hạng Định Giá Cổ Phiếu (Fair Value)")
         val_tickers_input = st.text_input("Nhập danh sách mã để chấm điểm định giá:", "HPG, SSI, VND, DBC, VNM, TCB, MBB, FPT, MWG, REE, VCB", key="val_input")
         
-        if st.button("🔍 Quét Định Giá & Tiềm Năng", use_container_width=True):
+        # --- ĐÃ SỬA width="stretch" ---
+        if st.button("🔍 Quét Định Giá & Tiềm Năng", width="stretch"):
             val_tickers = [x.strip().upper() for x in val_tickers_input.split(",") if x.strip()]
             val_results = []
             pb = st.progress(0)
@@ -463,7 +467,8 @@ def main():
         if st.session_state.get('top_3_value') is not None:
             st.markdown("---")
             st.subheader("🤖 Giám Đốc AI: Tích Sản Đầu Tư Giá Trị")
-            if st.button("🏆 Nhờ AI phân tích Top 3 mã định giá thấp nhất", use_container_width=True):
+            # --- ĐÃ SỬA width="stretch" ---
+            if st.button("🏆 Nhờ AI phân tích Top 3 mã định giá thấp nhất", width="stretch"):
                 top_3_str = ""
                 for _, row in st.session_state.top_3_value.iterrows():
                     top_3_str += f"- {row['Mã CP']}: Upside {row['Tăng lên (%)']:.1f}%, P/E {row['Tỉ số P/E']}, ROE {row['ROE (%)']}, {row['Sức Khỏe TC']}\n"
