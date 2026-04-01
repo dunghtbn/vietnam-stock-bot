@@ -3,5 +3,5 @@ pandas
 vnstock>=3.5.0
 ta
 plotly
-google-generativeai
+google-genai
 yfinance
