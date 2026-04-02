@@ -92,6 +92,8 @@ def load_vnindex_data(timeframe):
         
     return None
 
+# --- THAY THẾ 2 HÀM NÀY ĐỂ TRANG BỊ ĐỘNG CƠ QUÉT ĐA NGUỒN (VCI -> TCBS -> SSI) ---
+
 @st.cache_data(ttl=86400) 
 def load_fundamental_data(symbol):
     result = {'pe': 'N/A', 'pb': 'N/A', 'roe': 'N/A', 'market_cap': 'N/A', 'div_yield': 'N/A', 'debt_to_equity': 'N/A'}
@@ -101,33 +103,40 @@ def load_fundamental_data(symbol):
     
     print(f"\n[{log_time}] ⏳ BẮT ĐẦU TẢI DỮ LIỆU FA MÃ: {symbol}")
     
-    try:
-        stock = Vnstock().stock(symbol=symbol, source='VCI')
-        df_overview = stock.company.overview()
-        
-        if df_overview is not None and not df_overview.empty:
-            df_overview.columns = [str(c).lower().strip() for c in df_overview.columns]
-            data = df_overview.iloc[0]
+    # 1. ĐỘNG CƠ CHÍNH: Quét đa nguồn Vnstock (VCI -> TCBS -> SSI)
+    sources = ['VCI', 'TCBS', 'SSI']
+    
+    for src in sources:
+        try:
+            stock = Vnstock().stock(symbol=symbol, source=src)
+            df_overview = stock.company.overview()
             
-            if pd.notna(data.get('pe')): result['pe'] = f"{float(data.get('pe')):.2f}"
-            if pd.notna(data.get('pb')): result['pb'] = f"{float(data.get('pb')):.2f}"
-            
-            roe = data.get('roe')
-            if pd.notna(roe): 
-                roe_val = float(roe)
-                if -2.0 < roe_val < 2.0: roe_val *= 100 
-                result['roe'] = f"{roe_val:.2f}" 
+            if df_overview is not None and not df_overview.empty:
+                # Đồng nhất tên cột để bắt dữ liệu bất kể nguồn nào
+                df_overview.columns = [str(c).lower().strip().replace('_', '') for c in df_overview.columns]
+                data = df_overview.iloc[0]
                 
-            mc = data.get('marketcap')
-            if pd.notna(mc): result['market_cap'] = f"{float(mc):,.0f} Tỷ"
-            
-            print(f"  ✅ [Nguồn 1] Lấy P/E, P/B, ROE, Vốn hóa thành công từ: VNSTOCK (VCI)")
-        else:
-            print(f"  ⚠️ [Nguồn 1] Vnstock không có dữ liệu (Empty).")
-            
-    except Exception as e:
-        print(f"  ❌ [Nguồn 1] Lỗi khi gọi Vnstock: {e}")
+                if pd.notna(data.get('pe')) and result['pe'] == 'N/A': result['pe'] = f"{float(data.get('pe')):.2f}"
+                if pd.notna(data.get('pb')) and result['pb'] == 'N/A': result['pb'] = f"{float(data.get('pb')):.2f}"
+                
+                if pd.notna(data.get('roe')) and result['roe'] == 'N/A': 
+                    roe_val = float(data.get('roe'))
+                    if -2.0 < roe_val < 2.0: roe_val *= 100 
+                    result['roe'] = f"{roe_val:.2f}" 
+                    
+                mc_key = 'marketcap'
+                if pd.notna(data.get(mc_key)) and result['market_cap'] == 'N/A': 
+                    mc_val = float(data.get(mc_key))
+                    if mc_val > 1000000: mc_val = mc_val / 1e9 # Quy đổi ra Tỷ nếu số quá lớn
+                    result['market_cap'] = f"{mc_val:,.0f} Tỷ"
+                
+                print(f"  ✅ [Nguồn 1] Có dữ liệu Vnstock từ nguồn: {src}")
+                break # Lấy thành công thì thoát vòng lặp tìm nguồn
+        except Exception:
+            print(f"  ⚠️ [Nguồn 1] Trượt dữ liệu tại {src}, đang thử nguồn khác...")
+            continue
 
+    # 2. ĐỘNG CƠ PHỤ: Lấy Cổ tức, Nợ/Vốn và vét nốt dữ liệu thiếu từ Yahoo
     try:
         ticker = yf.Ticker(f"{symbol}.VN")
         info = ticker.info
@@ -138,26 +147,18 @@ def load_fundamental_data(symbol):
         if div_yield is not None:
             dy_val = float(div_yield)
             result['div_yield'] = f"{dy_val:.2f}%" if dy_val > 1 else f"{dy_val * 100:.2f}%"
-            print(f"  ✅ [Nguồn 2] Lấy Tỷ suất cổ tức thành công từ: YAHOO")
-        else:
-            print(f"  ⚠️ [Nguồn 2] Yahoo không có dữ liệu Cổ tức.")
             
         if debt_to_equity is not None:
             result['debt_to_equity'] = f"{float(debt_to_equity):.2f}%"
-            print(f"  ✅ [Nguồn 2] Lấy Nợ/Vốn thành công từ: YAHOO")
-        else:
-            print(f"  ⚠️ [Nguồn 2] Yahoo không có dữ liệu Nợ/Vốn.")
             
-        if result['pe'] == 'N/A' and info.get('trailingPE'): 
-            result['pe'] = f"{float(info.get('trailingPE')):.2f}"
-            print(f"  🔄 [Fallback] P/E bị thiếu ở Vnstock -> Đã lấy bù thành công từ YAHOO")
-            
-        if result['pb'] == 'N/A' and info.get('priceToBook'): 
-            result['pb'] = f"{float(info.get('priceToBook')):.2f}"
-            print(f"  🔄 [Fallback] P/B bị thiếu ở Vnstock -> Đã lấy bù thành công từ YAHOO")
+        # Yahoo vét máng những chỉ số còn lại nếu Vnstock chết toàn tập
+        if result['pe'] == 'N/A' and info.get('trailingPE'): result['pe'] = f"{float(info.get('trailingPE')):.2f}"
+        if result['pb'] == 'N/A' and info.get('priceToBook'): result['pb'] = f"{float(info.get('priceToBook')):.2f}"
+        if result['market_cap'] == 'N/A' and info.get('marketCap'): result['market_cap'] = f"{info.get('marketCap') / 1e9:,.0f} Tỷ"
+        if result['roe'] == 'N/A' and info.get('returnOnEquity'): result['roe'] = f"{float(info.get('returnOnEquity')) * 100:.2f}"
             
     except Exception as e:
-        print(f"  ❌ [Nguồn 2] Lỗi khi gọi Yahoo Finance: {e}")
+        print(f"  ❌ [Nguồn 2] Lỗi Yahoo Finance: {e}")
 
     print(f"[{log_time}] 🏁 KẾT THÚC TẢI FA MÃ: {symbol}\n")
     return result
@@ -165,7 +166,6 @@ def load_fundamental_data(symbol):
 @st.cache_data(ttl=86400)
 def get_valuation_metrics(symbol, current_price):
     eps, bvps = 0, 0
-    
     try:
         ticker = yf.Ticker(f"{symbol}.VN")
         info = ticker.info
@@ -175,18 +175,22 @@ def get_valuation_metrics(symbol, current_price):
         pass
         
     if eps == 0 or bvps == 0:
-        try:
-            stock = Vnstock().stock(symbol=symbol, source='VCI')
-            df_overview = stock.company.overview()
-            if df_overview is not None and not df_overview.empty:
-                df_overview.columns = [str(c).lower().strip() for c in df_overview.columns]
-                pe = df_overview.get('pe', pd.Series([None])).iloc[0]
-                pb = df_overview.get('pb', pd.Series([None])).iloc[0]
-                
-                if pd.notna(pe) and pe > 0 and current_price > 0: eps = current_price / float(pe)
-                if pd.notna(pb) and pb > 0 and current_price > 0: bvps = current_price / float(pb)
-        except Exception:
-            pass
+        # Áp dụng Động cơ 3 lõi cho cả thuật toán tính bù định giá
+        for src in ['VCI', 'TCBS', 'SSI']:
+            try:
+                stock = Vnstock().stock(symbol=symbol, source=src)
+                df_overview = stock.company.overview()
+                if df_overview is not None and not df_overview.empty:
+                    df_overview.columns = [str(c).lower().strip().replace('_', '') for c in df_overview.columns]
+                    pe = df_overview.get('pe', pd.Series([None])).iloc[0]
+                    pb = df_overview.get('pb', pd.Series([None])).iloc[0]
+                    
+                    if pd.notna(pe) and pe > 0 and current_price > 0: eps = current_price / float(pe)
+                    if pd.notna(pb) and pb > 0 and current_price > 0: bvps = current_price / float(pb)
+                    
+                    if eps > 0 and bvps > 0: break # Tính xong thì thoát
+            except Exception:
+                continue
             
     if eps > 0 and bvps > 0:
         graham_value = math.sqrt(22.5 * eps * bvps)
