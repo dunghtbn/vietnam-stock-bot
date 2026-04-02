@@ -92,13 +92,10 @@ def load_vnindex_data(timeframe):
         
     return None
 
-# --- ĐÃ SỬA LỖI NAME ERROR Ở HÀM NÀY ---
 @st.cache_data(ttl=86400) 
 def load_fundamental_data(symbol):
-    """Cỗ máy FA Hybrid: Dùng vnstock + Yahoo (Có in Log hệ thống)"""
     result = {'pe': 'N/A', 'pb': 'N/A', 'roe': 'N/A', 'market_cap': 'N/A', 'div_yield': 'N/A', 'debt_to_equity': 'N/A'}
     
-    # Khai báo đồng hồ thời gian nội bộ cho hàm này
     vn_tz = timezone(timedelta(hours=7))
     log_time = datetime.now(vn_tz).strftime("%H:%M:%S")
     
@@ -361,7 +358,7 @@ def main():
                     st.info(f"📈 **Đo lường RS (20 phiên):** Mã **{symbol}** thay đổi **{stock_perf:.2f}%** | VN-Index: **{vnindex_perf:.2f}%** ➔ Cổ phiếu đang **{rs_status}**")
                     st.subheader(f"📊 Biểu đồ {symbol} ({timeframe})")
                     fig = plot_chart(df, symbol, indicator_choice) 
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch") # SỬA Ở ĐÂY
 
                 with col_right:
                     st.subheader("📋 Chỉ số Kỹ thuật (TA)")
@@ -444,7 +441,7 @@ def main():
 
         if st.session_state.get('has_run_radar'):
             if st.session_state.radar_results:
-                st.dataframe(pd.DataFrame(st.session_state.radar_results), use_container_width=True)
+                st.dataframe(pd.DataFrame(st.session_state.radar_results), width="stretch") # SỬA Ở ĐÂY
                 if len(st.session_state.radar_results) > 1 and st.button("🏆 Nhờ AI chấm điểm", width="stretch"):
                     st.session_state.radar_ai_pick = get_ai_best_pick(api_key, st.session_state.radar_results)
                 if st.session_state.radar_ai_pick: st.info(st.session_state.radar_ai_pick)
@@ -494,7 +491,7 @@ def main():
                 def color_upside(val): return 'color: #00FF00; font-weight: bold' if val > 20 else 'color: #26a69a' if val > 0 else 'color: #ef5350'
                 
                 styled_df = df_display.style.map(color_upside, subset=['Tăng lên (%)']).format({"Tăng lên (%)": "{:+.2f}%"})
-                st.dataframe(styled_df, use_container_width=True, hide_index=True)
+                st.dataframe(styled_df, width="stretch", hide_index=True) # SỬA Ở ĐÂY
             else:
                 st.warning("Không có dữ liệu hợp lệ (Lưu ý: Các mã thua lỗ EPS âm sẽ bị loại bỏ khỏi bảng).")
 
