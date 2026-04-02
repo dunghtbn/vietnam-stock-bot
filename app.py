@@ -92,74 +92,98 @@ def load_vnindex_data(timeframe):
         
     return None
 
+# --- 1. THAY THẾ HÀM load_fundamental_data CŨ BẰNG ĐOẠN NÀY ---
 @st.cache_data(ttl=86400) 
 def load_fundamental_data(symbol):
+    """Cỗ máy FA Hybrid: Dùng vnstock (Nòng cốt) + Yahoo (Phụ trợ)"""
+    result = {'pe': 'N/A', 'pb': 'N/A', 'roe': 'N/A', 'market_cap': 'N/A', 'div_yield': 'N/A', 'debt_to_equity': 'N/A'}
+    
+    # ĐỘNG CƠ CHÍNH: Lấy P/E, P/B, ROE từ Vnstock (Nguồn VCI - Rất ổn định)
+    try:
+        stock = Vnstock().stock(symbol=symbol, source='VCI')
+        df_overview = stock.company.overview()
+        
+        if df_overview is not None and not df_overview.empty:
+            df_overview.columns = [str(c).lower().strip() for c in df_overview.columns]
+            data = df_overview.iloc[0]
+            
+            if pd.notna(data.get('pe')): result['pe'] = f"{float(data.get('pe')):.2f}"
+            if pd.notna(data.get('pb')): result['pb'] = f"{float(data.get('pb')):.2f}"
+            
+            roe = data.get('roe')
+            if pd.notna(roe): 
+                roe_val = float(roe)
+                if -2.0 < roe_val < 2.0: roe_val *= 100 # Chuyển 0.15 thành 15%
+                result['roe'] = f"{roe_val:.2f}" 
+                
+            mc = data.get('marketcap')
+            if pd.notna(mc): result['market_cap'] = f"{float(mc):,.0f} Tỷ" # Đơn vị vnstock thường là Tỷ
+    except Exception:
+        pass
+
+    # ĐỘNG CƠ PHỤ: Lấy Tỷ suất Cổ tức & Nợ/Vốn từ Yahoo Finance
     try:
         ticker = yf.Ticker(f"{symbol}.VN")
         info = ticker.info
         
-        pe = info.get('trailingPE')
-        pb = info.get('priceToBook')
-        roe = info.get('returnOnEquity')
-        market_cap = info.get('marketCap')
         div_yield = info.get('dividendYield')
         debt_to_equity = info.get('debtToEquity')
         
-        pe_str = f"{float(pe):.2f}" if pe is not None else "N/A"
-        pb_str = f"{float(pb):.2f}" if pb is not None else "N/A"
-        roe_str = f"{float(roe) * 100:.2f}" if roe is not None else "N/A"
-        market_cap_str = f"{market_cap / 1e9:,.0f} Tỷ" if market_cap is not None else "N/A"
-        
         if div_yield is not None:
             dy_val = float(div_yield)
-            if dy_val > 1: div_yield_str = f"{dy_val:.2f}%"
-            else: div_yield_str = f"{dy_val * 100:.2f}%"
-        else:
-            div_yield_str = "0.00%"
+            result['div_yield'] = f"{dy_val:.2f}%" if dy_val > 1 else f"{dy_val * 100:.2f}%"
         
-        debt_to_equity_str = f"{float(debt_to_equity):.2f}%" if debt_to_equity is not None else "N/A"
-        
-        return {
-            'pe': pe_str, 'pb': pb_str, 'roe': roe_str,
-            'market_cap': market_cap_str, 'div_yield': div_yield_str, 'debt_to_equity': debt_to_equity_str
-        }
-        
-    except Exception as e:
-        return {
-            'pe': 'N/A', 'pb': 'N/A', 'roe': 'N/A', 
-            'market_cap': 'N/A', 'div_yield': 'N/A', 'debt_to_equity': 'N/A'
-        }
+        if debt_to_equity is not None:
+            result['debt_to_equity'] = f"{float(debt_to_equity):.2f}%"
+            
+        # Dự phòng: Nếu Vnstock bảo trì, lấy bù dữ liệu cơ bản từ Yahoo
+        if result['pe'] == 'N/A' and info.get('trailingPE'): result['pe'] = f"{float(info.get('trailingPE')):.2f}"
+        if result['pb'] == 'N/A' and info.get('priceToBook'): result['pb'] = f"{float(info.get('priceToBook')):.2f}"
+        if result['roe'] == 'N/A' and info.get('returnOnEquity'): result['roe'] = f"{float(info.get('returnOnEquity')) * 100:.2f}"
+        if result['market_cap'] == 'N/A' and info.get('marketCap'): result['market_cap'] = f"{info.get('marketCap') / 1e9:,.0f} Tỷ"
+            
+    except Exception:
+        pass
 
+    return result
+
+# --- 2. THAY THẾ HÀM get_valuation_metrics CŨ BẰNG ĐOẠN NÀY ---
 @st.cache_data(ttl=86400)
-def get_valuation_metrics(symbol):
-    """Lấy dữ liệu EPS, BVPS và tính Giá trị hợp lý theo Benjamin Graham"""
+def get_valuation_metrics(symbol, current_price):
+    """Tính Giá trị Hợp lý: Ưu tiên Yahoo, nếu thiếu thì tự tính ngược từ P/E, P/B"""
+    eps, bvps = 0, 0
+    
+    # Thử lấy EPS, BVPS trực tiếp từ Yahoo Finance
     try:
         ticker = yf.Ticker(f"{symbol}.VN")
         info = ticker.info
-        
-        eps = info.get('trailingEps')
-        bvps = info.get('bookValue')
-        current_price = info.get('currentPrice') or info.get('previousClose')
-        
-        if eps and bvps and eps > 0 and bvps > 0:
-            graham_value = math.sqrt(22.5 * eps * bvps)
-            
-            if current_price and current_price > 0:
-                upside_pct = ((graham_value - current_price) / current_price) * 100
-            else:
-                upside_pct = 0
-                
-            return {
-                'price': current_price,
-                'fair_value': graham_value,
-                'upside': upside_pct,
-                'eps': eps,
-                'bvps': bvps
-            }
-    except Exception as e:
+        eps = info.get('trailingEps') or 0
+        bvps = info.get('bookValue') or 0
+    except Exception:
         pass
-    
-    return {'price': 0, 'fair_value': 0, 'upside': 0, 'eps': 0, 'bvps': 0}
+        
+    # Nếu Yahoo bị N/A, dùng Toán học để tính ngược từ PE, PB của Vnstock
+    if eps == 0 or bvps == 0:
+        try:
+            stock = Vnstock().stock(symbol=symbol, source='VCI')
+            df_overview = stock.company.overview()
+            if df_overview is not None and not df_overview.empty:
+                df_overview.columns = [str(c).lower().strip() for c in df_overview.columns]
+                pe = df_overview.get('pe', pd.Series([None])).iloc[0]
+                pb = df_overview.get('pb', pd.Series([None])).iloc[0]
+                
+                if pd.notna(pe) and pe > 0 and current_price > 0: eps = current_price / float(pe)
+                if pd.notna(pb) and pb > 0 and current_price > 0: bvps = current_price / float(pb)
+        except Exception:
+            pass
+            
+    # Tính Công thức Graham nếu có đủ dữ liệu
+    if eps > 0 and bvps > 0:
+        graham_value = math.sqrt(22.5 * eps * bvps)
+        upside_pct = ((graham_value - current_price) / current_price) * 100 if current_price > 0 else 0
+        return {'price': current_price, 'fair_value': graham_value, 'upside': upside_pct, 'eps': eps, 'bvps': bvps}
+        
+    return {'price': current_price, 'fair_value': 0, 'upside': 0, 'eps': 0, 'bvps': 0}
 
 def calculate_indicators(df):
     df['RSI'] = ta.momentum.RSIIndicator(close=df['Close'], window=14).rsi()
@@ -428,11 +452,17 @@ def main():
             val_results = []
             pb = st.progress(0)
             
+            # --- 3. TÌM VÀ SỬA ĐOẠN CODE NÀY TRONG VÒNG LẶP CỦA TAB 3 ---
             for i, t in enumerate(val_tickers):
                 pb.progress((i + 1) / len(val_tickers), text=f"Đang định giá mã {t}...")
-                val_data = get_valuation_metrics(t)
-                fa_data = load_fundamental_data(t)
                 
+                # Cần tải giá hiện tại trước để tính định giá bù
+                df_temp = load_data(t, "Ngày")
+                curr_price = df_temp['Close'].iloc[-1] if (df_temp is not None and not df_temp.empty) else 0
+                
+                val_data = get_valuation_metrics(t, curr_price)
+                fa_data = load_fundamental_data(t)
+                             
                 if val_data['fair_value'] > 0:
                     roe_val = float(fa_data['roe'].replace('%', '')) if fa_data['roe'] != "N/A" else 0
                     debt_val = float(fa_data['debt_to_equity'].replace('%', '')) if fa_data['debt_to_equity'] != "N/A" else 999
