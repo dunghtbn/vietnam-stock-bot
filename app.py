@@ -4,7 +4,7 @@ import ta
 import plotly.graph_objects as go
 from vnstock import Vnstock
 from datetime import date, timedelta, datetime, timezone
-from google import genai  # <-- ĐÃ CẬP NHẬT CHUẨN MỚI CỦA GOOGLE
+from google import genai
 import requests
 import yfinance as yf
 from plotly.subplots import make_subplots
@@ -92,16 +92,18 @@ def load_vnindex_data(timeframe):
         
     return None
 
-# --- THAY THẾ HÀM load_fundamental_data CŨ BẰNG ĐOẠN NÀY ---
+# --- ĐÃ SỬA LỖI NAME ERROR Ở HÀM NÀY ---
 @st.cache_data(ttl=86400) 
 def load_fundamental_data(symbol):
     """Cỗ máy FA Hybrid: Dùng vnstock + Yahoo (Có in Log hệ thống)"""
     result = {'pe': 'N/A', 'pb': 'N/A', 'roe': 'N/A', 'market_cap': 'N/A', 'div_yield': 'N/A', 'debt_to_equity': 'N/A'}
     
-    # In một dòng phân cách ra Log cho dễ nhìn
-    print(f"\n[{current_time}] ⏳ BẮT ĐẦU TẢI DỮ LIỆU FA MÃ: {symbol}")
+    # Khai báo đồng hồ thời gian nội bộ cho hàm này
+    vn_tz = timezone(timedelta(hours=7))
+    log_time = datetime.now(vn_tz).strftime("%H:%M:%S")
     
-    # 1. ĐỘNG CƠ CHÍNH: Lấy P/E, P/B, ROE từ Vnstock
+    print(f"\n[{log_time}] ⏳ BẮT ĐẦU TẢI DỮ LIỆU FA MÃ: {symbol}")
+    
     try:
         stock = Vnstock().stock(symbol=symbol, source='VCI')
         df_overview = stock.company.overview()
@@ -122,7 +124,6 @@ def load_fundamental_data(symbol):
             mc = data.get('marketcap')
             if pd.notna(mc): result['market_cap'] = f"{float(mc):,.0f} Tỷ"
             
-            # BÁO CÁO VÀO LOG: Đã lấy thành công từ Vnstock
             print(f"  ✅ [Nguồn 1] Lấy P/E, P/B, ROE, Vốn hóa thành công từ: VNSTOCK (VCI)")
         else:
             print(f"  ⚠️ [Nguồn 1] Vnstock không có dữ liệu (Empty).")
@@ -130,7 +131,6 @@ def load_fundamental_data(symbol):
     except Exception as e:
         print(f"  ❌ [Nguồn 1] Lỗi khi gọi Vnstock: {e}")
 
-    # 2. ĐỘNG CƠ PHỤ: Lấy Tỷ suất Cổ tức & Nợ/Vốn từ Yahoo Finance
     try:
         ticker = yf.Ticker(f"{symbol}.VN")
         info = ticker.info
@@ -151,7 +151,6 @@ def load_fundamental_data(symbol):
         else:
             print(f"  ⚠️ [Nguồn 2] Yahoo không có dữ liệu Nợ/Vốn.")
             
-        # 3. HỆ THỐNG TỰ ĐỘNG BÙ ĐẮP (FALLBACK)
         if result['pe'] == 'N/A' and info.get('trailingPE'): 
             result['pe'] = f"{float(info.get('trailingPE')):.2f}"
             print(f"  🔄 [Fallback] P/E bị thiếu ở Vnstock -> Đã lấy bù thành công từ YAHOO")
@@ -163,16 +162,13 @@ def load_fundamental_data(symbol):
     except Exception as e:
         print(f"  ❌ [Nguồn 2] Lỗi khi gọi Yahoo Finance: {e}")
 
-    print(f"[{current_time}] 🏁 KẾT THÚC TẢI FA MÃ: {symbol}\n")
+    print(f"[{log_time}] 🏁 KẾT THÚC TẢI FA MÃ: {symbol}\n")
     return result
 
-# --- 2. THAY THẾ HÀM get_valuation_metrics CŨ BẰNG ĐOẠN NÀY ---
 @st.cache_data(ttl=86400)
 def get_valuation_metrics(symbol, current_price):
-    """Tính Giá trị Hợp lý: Ưu tiên Yahoo, nếu thiếu thì tự tính ngược từ P/E, P/B"""
     eps, bvps = 0, 0
     
-    # Thử lấy EPS, BVPS trực tiếp từ Yahoo Finance
     try:
         ticker = yf.Ticker(f"{symbol}.VN")
         info = ticker.info
@@ -181,7 +177,6 @@ def get_valuation_metrics(symbol, current_price):
     except Exception:
         pass
         
-    # Nếu Yahoo bị N/A, dùng Toán học để tính ngược từ PE, PB của Vnstock
     if eps == 0 or bvps == 0:
         try:
             stock = Vnstock().stock(symbol=symbol, source='VCI')
@@ -196,7 +191,6 @@ def get_valuation_metrics(symbol, current_price):
         except Exception:
             pass
             
-    # Tính Công thức Graham nếu có đủ dữ liệu
     if eps > 0 and bvps > 0:
         graham_value = math.sqrt(22.5 * eps * bvps)
         upside_pct = ((graham_value - current_price) / current_price) * 100 if current_price > 0 else 0
@@ -270,7 +264,7 @@ def plot_chart(df, symbol, indicator_choice="RSI"):
     fig.update_xaxes(rangeslider_visible=False)
     return fig
 
-# --- 4. HÀM GỌI AI PHÂN TÍCH (ĐÃ CẬP NHẬT CHUẨN MỚI CỦA GOOGLE) ---
+# --- 4. HÀM GỌI AI PHÂN TÍCH ---
 def get_ai_analysis(api_key, symbol, current_price, rsi, ma20, status_ma20, bb_status, avg_vol, vol_today, stock_perf, vnindex_perf, rs_status, pe, pb, roe, market_cap, div_yield, debt_to_equity, indicator_choice, macd, macd_signal, macd_hist):
     if not api_key: return "⚠️ Vui lòng nhập API Key để xem phân tích."
     
@@ -300,7 +294,6 @@ def get_ai_best_pick(api_key, results_list):
             return client.models.generate_content(model='gemini-2.5-flash', contents=prompt).text
     except Exception as e: return f"Lỗi AI: {e}"
 
-# --- HÀM MỚI: AI PHÂN TÍCH VALUE INVESTING TỪ TAB 3 ---
 def get_ai_value_pick(api_key, top_3_info):
     if not api_key: return "⚠️ Vui lòng nhập API Key."
     client = genai.Client(api_key=api_key)
@@ -331,7 +324,6 @@ def main():
         timeframe = st.selectbox("Khung thời gian", ["Ngày", "Tuần"])
         indicator_choice = st.radio("Tầng 3: Chọn chỉ báo dao động", ["RSI", "MACD"], horizontal=True)
         
-        # --- ĐÃ SỬA width="stretch" ---
         if st.button("🔄 Làm mới dữ liệu (Real-time)", width="stretch"):
             st.cache_data.clear() 
             st.rerun()            
@@ -397,7 +389,6 @@ def main():
                     }))                   
                     
                     if api_key:
-                        # --- ĐÃ SỬA width="stretch" ---
                         if st.button("Phân tích chuyên sâu", width="stretch"):
                             status_ma20 = "nằm trên" if last_row['Close'] > last_row['MA20'] else "nằm dưới"
                             bb_status = "Quá mua" if last_row['Close'] >= last_row['BB_Upper'] else "Quá bán" if last_row['Close'] <= last_row['BB_Lower'] else "Bình thường"
@@ -420,7 +411,6 @@ def main():
         with col2: f_ma = st.selectbox("📈 Điều kiện MA20:", ["Không lọc", "Giá cắt lên MA20", "Nằm trên MA20"])
         with col3: f_roe = st.selectbox("🏢 Điều kiện ROE:", ["Không lọc", "ROE > 10%", "ROE > 15%", "ROE > 20%"])
 
-        # --- ĐÃ SỬA width="stretch" ---
         if st.button("🚀 Kích Hoạt Radar", width="stretch"):
             st.session_state.radar_results, st.session_state.radar_ai_pick = [], ""
             tickers = [x.strip().upper() for x in tickers_input.split(",") if x.strip()]
@@ -455,7 +445,6 @@ def main():
         if st.session_state.get('has_run_radar'):
             if st.session_state.radar_results:
                 st.dataframe(pd.DataFrame(st.session_state.radar_results), use_container_width=True)
-                # --- ĐÃ SỬA width="stretch" ---
                 if len(st.session_state.radar_results) > 1 and st.button("🏆 Nhờ AI chấm điểm", width="stretch"):
                     st.session_state.radar_ai_pick = get_ai_best_pick(api_key, st.session_state.radar_results)
                 if st.session_state.radar_ai_pick: st.info(st.session_state.radar_ai_pick)
@@ -465,17 +454,14 @@ def main():
         st.subheader("⚖️ Bảng Xếp Hạng Định Giá Cổ Phiếu (Fair Value)")
         val_tickers_input = st.text_input("Nhập danh sách mã để chấm điểm định giá:", "HPG, SSI, VND, DBC, VNM, TCB, MBB, FPT, MWG, REE, VCB", key="val_input")
         
-        # --- ĐÃ SỬA width="stretch" ---
         if st.button("🔍 Quét Định Giá & Tiềm Năng", width="stretch"):
             val_tickers = [x.strip().upper() for x in val_tickers_input.split(",") if x.strip()]
             val_results = []
             pb = st.progress(0)
             
-            # --- 3. TÌM VÀ SỬA ĐOẠN CODE NÀY TRONG VÒNG LẶP CỦA TAB 3 ---
             for i, t in enumerate(val_tickers):
                 pb.progress((i + 1) / len(val_tickers), text=f"Đang định giá mã {t}...")
                 
-                # Cần tải giá hiện tại trước để tính định giá bù
                 df_temp = load_data(t, "Ngày")
                 curr_price = df_temp['Close'].iloc[-1] if (df_temp is not None and not df_temp.empty) else 0
                 
@@ -499,7 +485,7 @@ def main():
             
             if val_results:
                 df_val = pd.DataFrame(val_results).sort_values(by="Tăng lên (%)", ascending=False).reset_index(drop=True)
-                st.session_state.top_3_value = df_val.head(3) # Lưu top 3 cho AI
+                st.session_state.top_3_value = df_val.head(3) 
                 
                 df_display = df_val.copy()
                 df_display['Giá HT'] = df_display['Giá HT'].apply(lambda x: f"{x:,.0f}")
@@ -512,11 +498,9 @@ def main():
             else:
                 st.warning("Không có dữ liệu hợp lệ (Lưu ý: Các mã thua lỗ EPS âm sẽ bị loại bỏ khỏi bảng).")
 
-        # NÚT GỌI AI PHÂN TÍCH VALUE ĐƯỢC CHUYỂN RA NGOÀI ĐỂ KHÔNG BỊ MẤT KHI RERUN
         if st.session_state.get('top_3_value') is not None:
             st.markdown("---")
             st.subheader("🤖 Giám Đốc AI: Tích Sản Đầu Tư Giá Trị")
-            # --- ĐÃ SỬA width="stretch" ---
             if st.button("🏆 Nhờ AI phân tích Top 3 mã định giá thấp nhất", width="stretch"):
                 top_3_str = ""
                 for _, row in st.session_state.top_3_value.iterrows():
