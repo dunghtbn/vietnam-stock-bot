@@ -92,13 +92,16 @@ def load_vnindex_data(timeframe):
         
     return None
 
-# --- 1. THAY THẾ HÀM load_fundamental_data CŨ BẰNG ĐOẠN NÀY ---
+# --- THAY THẾ HÀM load_fundamental_data CŨ BẰNG ĐOẠN NÀY ---
 @st.cache_data(ttl=86400) 
 def load_fundamental_data(symbol):
-    """Cỗ máy FA Hybrid: Dùng vnstock (Nòng cốt) + Yahoo (Phụ trợ)"""
+    """Cỗ máy FA Hybrid: Dùng vnstock + Yahoo (Có in Log hệ thống)"""
     result = {'pe': 'N/A', 'pb': 'N/A', 'roe': 'N/A', 'market_cap': 'N/A', 'div_yield': 'N/A', 'debt_to_equity': 'N/A'}
     
-    # ĐỘNG CƠ CHÍNH: Lấy P/E, P/B, ROE từ Vnstock (Nguồn VCI - Rất ổn định)
+    # In một dòng phân cách ra Log cho dễ nhìn
+    print(f"\n[{current_time}] ⏳ BẮT ĐẦU TẢI DỮ LIỆU FA MÃ: {symbol}")
+    
+    # 1. ĐỘNG CƠ CHÍNH: Lấy P/E, P/B, ROE từ Vnstock
     try:
         stock = Vnstock().stock(symbol=symbol, source='VCI')
         df_overview = stock.company.overview()
@@ -113,15 +116,21 @@ def load_fundamental_data(symbol):
             roe = data.get('roe')
             if pd.notna(roe): 
                 roe_val = float(roe)
-                if -2.0 < roe_val < 2.0: roe_val *= 100 # Chuyển 0.15 thành 15%
+                if -2.0 < roe_val < 2.0: roe_val *= 100 
                 result['roe'] = f"{roe_val:.2f}" 
                 
             mc = data.get('marketcap')
-            if pd.notna(mc): result['market_cap'] = f"{float(mc):,.0f} Tỷ" # Đơn vị vnstock thường là Tỷ
-    except Exception:
-        pass
+            if pd.notna(mc): result['market_cap'] = f"{float(mc):,.0f} Tỷ"
+            
+            # BÁO CÁO VÀO LOG: Đã lấy thành công từ Vnstock
+            print(f"  ✅ [Nguồn 1] Lấy P/E, P/B, ROE, Vốn hóa thành công từ: VNSTOCK (VCI)")
+        else:
+            print(f"  ⚠️ [Nguồn 1] Vnstock không có dữ liệu (Empty).")
+            
+    except Exception as e:
+        print(f"  ❌ [Nguồn 1] Lỗi khi gọi Vnstock: {e}")
 
-    # ĐỘNG CƠ PHỤ: Lấy Tỷ suất Cổ tức & Nợ/Vốn từ Yahoo Finance
+    # 2. ĐỘNG CƠ PHỤ: Lấy Tỷ suất Cổ tức & Nợ/Vốn từ Yahoo Finance
     try:
         ticker = yf.Ticker(f"{symbol}.VN")
         info = ticker.info
@@ -132,19 +141,29 @@ def load_fundamental_data(symbol):
         if div_yield is not None:
             dy_val = float(div_yield)
             result['div_yield'] = f"{dy_val:.2f}%" if dy_val > 1 else f"{dy_val * 100:.2f}%"
-        
+            print(f"  ✅ [Nguồn 2] Lấy Tỷ suất cổ tức thành công từ: YAHOO")
+        else:
+            print(f"  ⚠️ [Nguồn 2] Yahoo không có dữ liệu Cổ tức.")
+            
         if debt_to_equity is not None:
             result['debt_to_equity'] = f"{float(debt_to_equity):.2f}%"
+            print(f"  ✅ [Nguồn 2] Lấy Nợ/Vốn thành công từ: YAHOO")
+        else:
+            print(f"  ⚠️ [Nguồn 2] Yahoo không có dữ liệu Nợ/Vốn.")
             
-        # Dự phòng: Nếu Vnstock bảo trì, lấy bù dữ liệu cơ bản từ Yahoo
-        if result['pe'] == 'N/A' and info.get('trailingPE'): result['pe'] = f"{float(info.get('trailingPE')):.2f}"
-        if result['pb'] == 'N/A' and info.get('priceToBook'): result['pb'] = f"{float(info.get('priceToBook')):.2f}"
-        if result['roe'] == 'N/A' and info.get('returnOnEquity'): result['roe'] = f"{float(info.get('returnOnEquity')) * 100:.2f}"
-        if result['market_cap'] == 'N/A' and info.get('marketCap'): result['market_cap'] = f"{info.get('marketCap') / 1e9:,.0f} Tỷ"
+        # 3. HỆ THỐNG TỰ ĐỘNG BÙ ĐẮP (FALLBACK)
+        if result['pe'] == 'N/A' and info.get('trailingPE'): 
+            result['pe'] = f"{float(info.get('trailingPE')):.2f}"
+            print(f"  🔄 [Fallback] P/E bị thiếu ở Vnstock -> Đã lấy bù thành công từ YAHOO")
             
-    except Exception:
-        pass
+        if result['pb'] == 'N/A' and info.get('priceToBook'): 
+            result['pb'] = f"{float(info.get('priceToBook')):.2f}"
+            print(f"  🔄 [Fallback] P/B bị thiếu ở Vnstock -> Đã lấy bù thành công từ YAHOO")
+            
+    except Exception as e:
+        print(f"  ❌ [Nguồn 2] Lỗi khi gọi Yahoo Finance: {e}")
 
+    print(f"[{current_time}] 🏁 KẾT THÚC TẢI FA MÃ: {symbol}\n")
     return result
 
 # --- 2. THAY THẾ HÀM get_valuation_metrics CŨ BẰNG ĐOẠN NÀY ---
